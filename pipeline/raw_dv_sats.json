@@ -1,0 +1,208 @@
+{
+	"name": "raw_dv_sats",
+	"properties": {
+		"activities": [
+			{
+				"name": "SatGetMetadata",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT sm.SOURCE_TABLE,\n       s.SCHEMA_NAME,\n       s.SAT_NAME AS VAULT_TABLE,\n       coalesce(hm.PK_LIST, lm.PK_LIST) AS PARENT_PK_LIST,\n       coalesce(h.HUB_NAME, l.LINK_NAME) AS PARENT_NAME,\n       sm.RECORD_SOURCE,\n       sm.SAT_ID,\n       sp.PARENT_TYPE,\n       CASE\n           WHEN sp.PARENT_TYPE = 'HUB' THEN sp.HUB_ID\n           ELSE sp.LINK_ID\n       END AS parent_id,\n       CASE\n           WHEN @{pipeline().parameters.load_synapse}=1 THEN REPLACE(sm.SOURCE_SCHEMA, 'EXT_', 'INT_')\n           ELSE sm.SOURCE_SCHEMA\n       END AS SOURCE_SCHEMA\nFROM adf_metastore.dv.dv_sat_map sm\nJOIN adf_metastore.dv.dv_satellites s ON sm.SAT_ID = s.SAT_ID\nJOIN adf_metastore.dv.dv_satellite_parents sp ON s.PARENT_SAT_ID = sp.PARENT_SAT_ID\nLEFT JOIN adf_metastore.dv.dv_hubs h ON sp.HUB_ID = h.HUB_ID\nLEFT JOIN adf_metastore.dv.dv_links l ON sp.LINK_ID = l.LINK_ID\nLEFT JOIN adf_metastore.dv.dv_hub_map hm ON h.HUB_ID = hm.HUB_ID\nLEFT JOIN adf_metastore.dv.dv_link_map lm ON l.LINK_ID = lm.LINK_ID\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "joined_satellites",
+							"schema_name": "dv"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopSats",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "SatGetMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('SatGetMetadata').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "SatLoad",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[etl].[SAT_GEN]",
+								"storedProcedureParameters": {
+									"job_id": {
+										"value": {
+											"value": "@pipeline().parameters.MasterRunID",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"parent_object": {
+										"value": {
+											"value": "@item().PARENT_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"pk_list": {
+										"value": {
+											"value": "@item().PARENT_PK_LIST",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"record_source": {
+										"value": {
+											"value": "@item().RECORD_SOURCE",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_schema": {
+										"value": {
+											"value": "@item().SOURCE_SCHEMA",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_table": {
+										"value": {
+											"value": "@item().SOURCE_TABLE",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_schema": {
+										"value": {
+											"value": "@item().SCHEMA_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_table": {
+										"value": {
+											"value": "@item().VAULT_TABLE",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": "@pipeline().globalParameters.dw_db_name"
+								}
+							}
+						},
+						{
+							"name": "DropStagingTable",
+							"type": "IfCondition",
+							"dependsOn": [
+								{
+									"activity": "SatLoad",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@equals(pipeline().parameters.load_synapse, 1)",
+									"type": "Expression"
+								},
+								"ifTrueActivities": [
+									{
+										"name": "Lookup1",
+										"type": "Lookup",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlDWSource",
+												"sqlReaderQuery": {
+													"value": "DROP TABLE @{item().SOURCE_SCHEMA}.@{item().SOURCE_TABLE};\nSELECT 1",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "Shield",
+												"type": "DatasetReference",
+												"parameters": {
+													"TABLE_NAME": "\"\"",
+													"shield_db_name": "synlwcaelumdevdwsql"
+												}
+											}
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"MasterRunID": {
+				"type": "string"
+			},
+			"load_synapse": {
+				"type": "int",
+				"defaultValue": 0
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/raw vault"
+		},
+		"annotations": []
+	}
+}

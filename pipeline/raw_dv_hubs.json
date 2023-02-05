@@ -1,0 +1,151 @@
+{
+	"name": "raw_dv_hubs",
+	"properties": {
+		"activities": [
+			{
+				"name": "HubGetMetadata",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT\n\tm.HUB_MAP_ID,\n\tm.SOURCE_TABLE,\n\tm.PK_LIST,\n\tm.RECORD_SOURCE,\n\tm.HUB_ID,\n\tm.active_flg,\n\tm.target_pk_list,\n\th.HUB_NAME,\n\th.SCHEMA_NAME,\n\tCASE \n\t\tWHEN @{pipeline().parameters.load_synapse}=1 THEN REPLACE(SOURCE_SCHEMA, 'EXT_', 'INT_')\n\t\tELSE SOURCE_SCHEMA\n\tEND SOURCE_SCHEMA\nFROM adf_metastore.dv.dv_hub_map m\njoin adf_metastore.dv.dv_hubs h\non h.HUB_ID = m.HUB_ID\nwhere active_flg = 1 ",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "dv_hubs",
+							"schema_name": "dv"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopHubs",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "HubGetMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('HubGetMetadata').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "HubLoad",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[etl].[HUB_GEN]",
+								"storedProcedureParameters": {
+									"job_id": {
+										"value": {
+											"value": "@pipeline().parameters.MasterRunID",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"pk_list": {
+										"value": {
+											"value": "@item().PK_LIST",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"record_source": {
+										"value": {
+											"value": "@item().RECORD_SOURCE",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_schema": {
+										"value": {
+											"value": "@item().SOURCE_SCHEMA",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_table": {
+										"value": {
+											"value": "@item().SOURCE_TABLE",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_schema": {
+										"value": {
+											"value": "@item().SCHEMA_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_table": {
+										"value": {
+											"value": "@item().HUB_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.dw_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"MasterRunID": {
+				"type": "string"
+			},
+			"load_synapse": {
+				"type": "int",
+				"defaultValue": 0
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/raw vault"
+		},
+		"annotations": []
+	}
+}

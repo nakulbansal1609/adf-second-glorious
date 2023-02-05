@@ -1,0 +1,175 @@
+{
+	"name": "raw_to_business",
+	"properties": {
+		"activities": [
+			{
+				"name": "Generate select statement for target",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Empty table flag",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[sp_generate_bv_sql]",
+						"storedProcedureParameters": {
+							"full_load": {
+								"type": "Int32",
+								"value": {
+									"value": "@activity('Empty table flag').output.firstRow.empty_row_flag",
+									"type": "Expression"
+								}
+							},
+							"target_table": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.target_table",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "sp_generate_bv_sql",
+							"schema_name": "dbo"
+						}
+					}
+				}
+			},
+			{
+				"name": "Empty table flag",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT CASE WHEN count(*)=0 THEN 1 ELSE 0 END empty_row_flag\nFROM [biz].[@{pipeline().parameters.target_table}]\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "data_vault_db",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": {
+								"value": "@pipeline().parameters.target_table",
+								"type": "Expression"
+							},
+							"SCHEMA_NAME": "dbo",
+							"dw_db_name": {
+								"value": "@pipeline().globalParameters.dw_db_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": true
+				}
+			},
+			{
+				"name": "sp_load_data",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Generate select statement for target",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[sp_load_data]",
+					"storedProcedureParameters": {
+						"run_id": {
+							"value": {
+								"value": "@pipeline().RunId",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"sql_query": {
+							"value": {
+								"value": "@activity('Generate select statement for target').output.firstRow.select_statement",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"target_table": {
+							"value": {
+								"value": "@pipeline().parameters.target_table",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"time_limit_enforce": {
+							"value": {
+								"value": "@pipeline().parameters.time_limit_enforce",
+								"type": "Expression"
+							},
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "shield_db",
+					"type": "LinkedServiceReference",
+					"parameters": {
+						"database_name": {
+							"value": "@pipeline().globalParameters.dw_db_name",
+							"type": "Expression"
+						}
+					}
+				}
+			}
+		],
+		"parameters": {
+			"target_table": {
+				"type": "string"
+			},
+			"time_limit_enforce": {
+				"type": "string",
+				"defaultValue": "prev_day"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/etl"
+		},
+		"annotations": []
+	}
+}

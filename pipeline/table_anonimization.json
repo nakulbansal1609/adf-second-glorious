@@ -1,0 +1,61 @@
+{
+	"name": "table_anonimization",
+	"properties": {
+		"activities": [
+			{
+				"name": "Stored procedure1",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[sp_table_anon]",
+					"storedProcedureParameters": {
+						"run_id": {
+							"value": "",
+							"type": "String"
+						},
+						"source_column": {
+							"value": "",
+							"type": "String"
+						},
+						"source_schema": {
+							"value": "",
+							"type": "String"
+						},
+						"source_table": {
+							"value": "",
+							"type": "String"
+						},
+						"target_column": {
+							"value": "",
+							"type": "String"
+						},
+						"target_schema": {
+							"value": "",
+							"type": "String"
+						},
+						"target_table": {
+							"value": "",
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "shield_db",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/information_mart"
+		},
+		"annotations": []
+	}
+}

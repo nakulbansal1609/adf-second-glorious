@@ -1,0 +1,176 @@
+{
+	"name": "catalog_biz_vlt",
+	"properties": {
+		"activities": [
+			{
+				"name": "Catalog biz tables",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": "SELECT HASHBYTES('MD5', TABLE_NAME) bv_target_table_id, table_name\nFROM INFORMATION_SCHEMA.TABLES\nWHERE TABLE_SCHEMA='biz'",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"sqlWriterStoredProcedureName": "[dbo].[spUpsertTargetTables]",
+						"sqlWriterTableType": "target_tables_type",
+						"storedProcedureTableTypeParameterName": "target_tables",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "data_vault_db",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "INFORMATION_SCHEMA.TABLES",
+							"SCHEMA_NAME": "dbo",
+							"dw_db_name": {
+								"value": "@pipeline().globalParameters.dw_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "bv_target_tables",
+							"schema_name": "dv"
+						}
+					}
+				]
+			},
+			{
+				"name": "Catalog biz columns",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Catalog biz tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": "SELECT HASHBYTES('MD5', CONCAT(col.TABLE_NAME, col.COLUMN_NAME)) bv_target_col_id, \n\t\tHASHBYTES('MD5', col.TABLE_NAME) bv_target_table_id,  \n\t\tcol.table_name, \n\t\tcol.column_name,\n\t\tcol.ordinal_position,\n\t\tCASE WHEN pk_flag IS NULL THEN 0 ELSE pk_flag END pk_flag\nFROM INFORMATION_SCHEMA.COLUMNS col\nLEFT JOIN (SELECT DISTINCT tab.table_name, col.column_name, 1 pk_flag from \n\t\t\tINFORMATION_SCHEMA.TABLE_CONSTRAINTS tab, \n\t\t\tINFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE col \n\t\tWHERE \n\t\t\tcol.constraint_name = tab.constraint_name\n\t\t\tAND col.Table_name = tab.table_name\n\t\t\tAND constraint_type = 'PRIMARY KEY'\n\t\t\tAND col.constraint_schema='biz') pk\nON col.table_name=pk.table_name\nAND col.column_name=pk.column_name\nWHERE TABLE_SCHEMA='biz'\n\n\n",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"sqlWriterStoredProcedureName": "[dbo].[spUpsertTargetCols]",
+						"sqlWriterTableType": "target_col_type",
+						"storedProcedureTableTypeParameterName": "target_cols",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "data_vault_db",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "INFORMATION_SCHEMA.TABLES",
+							"SCHEMA_NAME": "dbo",
+							"dw_db_name": {
+								"value": "@pipeline().globalParameters.dw_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "bv_target_col",
+							"schema_name": "dv"
+						}
+					}
+				]
+			},
+			{
+				"name": "Insert new columns into mapping table",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Catalog biz columns",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "  MERGE [dv].[bv_column_map] AS target_sqldb\n  USING [dv].[bv_target_col] AS source_tblstg\n  ON (target_sqldb.bv_target_col_id = source_tblstg.bv_target_col_id)\n  WHEN NOT MATCHED THEN\n      INSERT (\n          [bv_st_map_id],\n\t\t  [source_col_def],\n          [bv_target_col_id]\n        )\n      VALUES (\n          NULL,\n\t\t  NULL,\n          source_tblstg.bv_target_col_id\n        ); SELECT 1",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "bv_column_map",
+							"schema_name": "dv"
+						}
+					}
+				}
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/biz vault"
+		},
+		"annotations": []
+	}
+}

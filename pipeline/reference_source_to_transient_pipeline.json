@@ -1,0 +1,1226 @@
+{
+	"name": "reference_source_to_transient_pipeline",
+	"properties": {
+		"activities": [
+			{
+				"name": "Get_File_Metadata",
+				"type": "GetMetadata",
+				"dependsOn": [
+					{
+						"activity": "GetCountry",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "ds_filesystem_referencedata",
+						"type": "DatasetReference",
+						"parameters": {
+							"FileName": {
+								"value": "@concat(pipeline().parameters.table_name,'.csv')",
+								"type": "Expression"
+							},
+							"country": {
+								"value": "@activity('GetCountry').output.firstRow.country_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"fieldList": [
+						"lastModified",
+						"itemName"
+					],
+					"storeSettings": {
+						"type": "FileServerReadSettings",
+						"recursive": true,
+						"enablePartitionDiscovery": false
+					},
+					"formatSettings": {
+						"type": "DelimitedTextReadSettings"
+					}
+				}
+			},
+			{
+				"name": "GetTableMetadata",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Get_File_Metadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetTableMetadata]",
+						"storedProcedureParameters": {
+							"SourceName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@replace(activity('Get_File_Metadata').output.ItemName, '.csv', '')",
+									"type": "Expression"
+								}
+							},
+							"Env": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().globalParameters.environment",
+									"type": "Expression"
+								}
+							},
+							"catchup": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.catchup",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_tablelist",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "CheckDate",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "MasterRunIDSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetDay",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetMonth",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetYear",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@greater(ticks(activity('Get_File_Metadata').output.lastModified),ticks(activity('GetTableMetadata').output.firstRow.max_timestamp))",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "ExtractColumnsFileMetastore_Dummy",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "ExtractColumnsFileMetadata_Dummy",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "columns_metadata",
+								"value": {
+									"value": "@json('[\"Output2\"]')",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "ExtractColumnsFileMetadata_Dummy",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "columns_file",
+								"value": {
+									"value": "@json('[\"Output1\"]')",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "TransientGetMetadata",
+							"type": "GetMetadata",
+							"dependsOn": [
+								{
+									"activity": "MoveDataFromSourceToTransient_DependingOnTableName",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"dataset": {
+									"referenceName": "caelum_data_lake_csv",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.transient_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "@formatDateTime(variables('date'),'yyyy')",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@formatDateTime(variables('date'),'MM')",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@formatDateTime(variables('date'),'dd')",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@replace(activity('Get_File_Metadata').output.ItemName, '.csv', '')",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								},
+								"fieldList": [
+									"structure"
+								],
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							}
+						},
+						{
+							"name": "RetrieveMetadataFileSchema",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "MoveDataFromSourceToTransient_DependingOnTableName",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "SELECT (\n      SELECT column_name AS [name], 'String' as [type]\n\t  FROM reference_schema\n      WHERE file_name = '@{activity('GetTableMetadata').output.firstRow.table_name}'\n      FOR JSON AUTO\n) AS structure",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								},
+								"firstRowOnly": false
+							}
+						},
+						{
+							"name": "ExtractColumnsFileMetastore",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "RetrieveMetadataFileSchema",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "columns_metadata",
+								"value": {
+									"value": "@json(activity('RetrieveMetadataFileSchema').output.value[0].structure)",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "ExtractColumnsFileMetadata",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "TransientGetMetadata",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "columns_file",
+								"value": {
+									"value": "@json(string(activity('TransientGetMetadata').output.structure))",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "MoveDataFromSourceToTransient_DependingOnTableName",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+
+								"pipeline": {
+									"referenceName": "reference_switch_pipe_source_to_transient",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"FileName": {
+										"value": "@concat(activity('GetTableMetadata').output.firstRow.table_name,'.csv')",
+
+										"type": "Expression"
+									},
+									"country": {
+										"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@pipeline().parameters.source",
+										"type": "Expression"
+									},
+									"year": {
+										"value": "@variables('year')",
+										"type": "Expression"
+									},
+									"month": {
+										"value": "@variables('month')",
+										"type": "Expression"
+									},
+									"day": {
+										"value": "@variables('day')",
+										"type": "Expression"
+									},
+									"table_name": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"timestamp": {
+										"value": "@variables('timestamp')",
+										"type": "Expression"
+									},
+									"lastModified": {
+										"value": "@activity('Get_File_Metadata').output.lastModified",
+										"type": "Expression"
+									},
+									"prev_max_index": {
+										"value": "@activity('GetTableMetadata').output.firstRow.max_index",
+										"type": "Expression"
+									},
+									"MasterRunID": {
+										"value": "@variables('MasterRunID')",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "DateConditionalSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.date)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetCurrentTimestampFromParam_copy1_copy1",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@pipeline().parameters.date",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentTimestamp_copy1_copy1",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@utcnow()",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "MasterRunIDSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.MasterRunID)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMasterRunID_copy1_copy1",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().parameters.MasterRunID",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentMasterRunID_copy1_copy1",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().RunId",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "CheckSchemaEquality",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "CheckDate",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('columns_file')[0],variables('columns_metadata')[0])",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "Set_Var_False",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "SchemaValidation",
+								"value": "False"
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "Set_Var_True",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "SchemaValidation",
+								"value": "True"
+							}
+						},
+						{
+							"name": "DataFlowConvertCsvtoParquet",
+							"type": "ExecuteDataFlow",
+							"dependsOn": [
+								{
+									"activity": "Set_Var_True",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "1.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"dataflow": {
+									"referenceName": "data_reference_conversion",
+									"type": "DataFlowReference",
+									"parameters": {
+										"table_name": {
+											"value": "'@{pipeline().parameters.table_name}'",
+											"type": "Expression"
+										},
+										"timestamp": {
+											"value": "'@{variables('timestamp')}'",
+											"type": "Expression"
+										}
+									},
+									"datasetParameters": {
+										"ReferenceDataCSV": {
+											"country": {
+												"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+												"type": "Expression"
+											},
+											"zone": {
+												"value": "@pipeline().globalParameters.transient_zone_name",
+												"type": "Expression"
+											},
+											"source": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											},
+											"year": {
+												"value": "@variables('year')",
+												"type": "Expression"
+											},
+											"month": {
+												"value": "@variables('month')",
+												"type": "Expression"
+											},
+											"day": {
+												"value": "@variables('day')",
+												"type": "Expression"
+											},
+											"table": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"file_timestamp": {
+												"value": "@variables('timestamp')",
+												"type": "Expression"
+											},
+											"adls_dw_container_name": {
+												"value": "@pipeline().globalParameters.adls_dw_container_name",
+												"type": "Expression"
+											}
+										},
+										"SinkCsvToParquet": {
+											"country": {
+												"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+												"type": "Expression"
+											},
+											"zone": {
+												"value": "@pipeline().globalParameters.transient_zone_name",
+												"type": "Expression"
+											},
+											"source": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											},
+											"year": {
+												"value": "@variables('year')",
+												"type": "Expression"
+											},
+											"month": {
+												"value": "@variables('month')",
+												"type": "Expression"
+											},
+											"day": {
+												"value": "@variables('day')",
+												"type": "Expression"
+											},
+											"table": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"file_timestamp": {
+												"value": "@variables('timestamp')",
+												"type": "Expression"
+											},
+											"adls_dw_container_name": {
+												"value": "@pipeline().globalParameters.adls_dw_container_name",
+												"type": "Expression"
+											}
+										}
+									}
+								},
+								"integrationRuntime": {
+									"referenceName": "ahirq-lw-caelum-prod-dw-01",
+									"type": "IntegrationRuntimeReference"
+								},
+								"traceLevel": "Fine"
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetYear",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "year",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'yyyy')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetMonth",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "month",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'MM')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetDay",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "day",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'dd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetTimestamp",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "timestamp",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "CheckLoadTypeReferenceData",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "CheckSchemaEquality",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@and(equals(string(activity('GetTableMetadata').output.firstRow.load_type), 'last_version'), equals(variables('SchemaValidation'), 'True'))",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "DeleteOldFilesFromRaw",
+							"type": "Delete",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"dataset": {
+									"referenceName": "caelum_data_lake_purge",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.raw_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								},
+								"logStorageSettings": {
+									"linkedServiceName": {
+										"referenceName": "datalake",
+										"type": "LinkedServiceReference"
+									},
+									"path": "fs01-dlalwcaelumdevdw01/purge_logs/reference_purge"
+								},
+								"enableLogging": true,
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								}
+							}
+						},
+						{
+							"name": "DeleteOldFilesFromTrusted",
+							"type": "Delete",
+							"dependsOn": [
+								{
+									"activity": "DeleteOldFilesFromRaw",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"dataset": {
+									"referenceName": "caelum_data_lake_purge",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.trusted_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "*",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								},
+								"logStorageSettings": {
+									"linkedServiceName": {
+										"referenceName": "datalake",
+										"type": "LinkedServiceReference"
+									},
+									"path": "fs01-dlalwcaelumdevdw01/purge_logs/reference_purge"
+								},
+								"enableLogging": true,
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetAhirCount",
+				"description": "variable needed to see what ahir to be chosen for the dataflow",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetRowCountFromTransientFile",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "transient_record_count",
+					"value": {
+						"value": "@string(activity('GetRowCountFromTransientFile').output.count)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetCountry",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT country_name FROM dbo.countries AS T1 \nINNER JOIN dbo.table_list AS T2 ON T1.country_id = T2.country_id\nWHERE T2.table_name = '@{pipeline().parameters.table_name}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetTablePreTransformations",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SetAhirCount",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetPreTransformations]",
+						"storedProcedureParameters": {
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "IfAnyPreTransformations",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTablePreTransformations",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetTablePreTransformations').output.firstRow.table_preTrans,null)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "DataPreTransformations_copy1",
+							"type": "DatabricksNotebook",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"notebookPath": {
+									"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'adf-pretransformations/adf_preTrans')\n",
+									"type": "Expression"
+								},
+								"baseParameters": {
+									"country": {
+										"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+										"type": "Expression"
+									},
+									"zone": {
+										"value": "@pipeline().globalParameters.transient_zone_name",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@pipeline().parameters.source",
+										"type": "Expression"
+									},
+									"year": {
+										"value": "@formatDateTime(variables('date'),'yyyy')",
+										"type": "Expression"
+									},
+									"month": {
+										"value": "@formatDateTime(variables('date'),'MM')",
+										"type": "Expression"
+									},
+									"day": {
+										"value": "@formatDateTime(variables('date'),'dd')",
+										"type": "Expression"
+									},
+									"table": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"file_timestamp": {
+										"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+										"type": "Expression"
+									},
+									"sql_definitions": {
+										"value": "@activity('GetTablePreTransformations').output.firstRow.table_preTrans",
+										"type": "Expression"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "databricks_cs",
+								"type": "LinkedServiceReference"
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetRowCountFromTransientFile",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckLoadTypeReferenceData",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "ParquetSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"wildcardFileName": "*.parquet",
+							"enablePartitionDiscovery": false
+						}
+					},
+					"dataset": {
+						"referenceName": "caelum_data_lake_dataflow",
+						"type": "DatasetReference",
+						"parameters": {
+							"country": {
+								"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+								"type": "Expression"
+							},
+							"zone": {
+								"value": "@pipeline().globalParameters.transient_zone_name",
+								"type": "Expression"
+							},
+							"source": {
+								"value": "@pipeline().parameters.source",
+								"type": "Expression"
+							},
+							"year": {
+								"value": "@variables('year')",
+								"type": "Expression"
+							},
+							"month": {
+								"value": "@variables('month')",
+								"type": "Expression"
+							},
+							"day": {
+								"value": "@variables('day')",
+								"type": "Expression"
+							},
+							"table": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"file_timestamp": {
+								"value": "@variables('timestamp')",
+								"type": "Expression"
+							},
+							"adls_dw_container_name": {
+								"value": "@pipeline().globalParameters.adls_dw_container_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"source": {
+				"type": "string"
+			},
+			"date": {
+				"type": "string"
+			},
+			"MasterRunID": {
+				"type": "string"
+			},
+			"table_name": {
+				"type": "string",
+				"defaultValue": "Housing_Asso_Addr"
+			},
+			"catchup": {
+				"type": "string",
+				"defaultValue": "false"
+			}
+		},
+		"variables": {
+			"nested_source": {
+				"type": "String"
+			},
+			"date": {
+				"type": "String"
+			},
+			"MasterRunID": {
+				"type": "String"
+			},
+			"SchemaValidation": {
+				"type": "String"
+			},
+			"columns_metadata": {
+				"type": "Array"
+			},
+			"columns_file": {
+				"type": "Array"
+			},
+			"year": {
+				"type": "String"
+			},
+			"day": {
+				"type": "String"
+			},
+			"month": {
+				"type": "String"
+			},
+			"timestamp": {
+				"type": "String"
+			},
+			"transient_record_count": {
+				"type": "String",
+				"defaultValue": "0"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/1 source_to_transient"
+		},
+		"annotations": []
+	}
+}

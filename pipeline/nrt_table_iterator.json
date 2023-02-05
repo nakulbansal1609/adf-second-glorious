@@ -1,0 +1,94 @@
+{
+	"name": "nrt_table_iterator",
+	"properties": {
+		"activities": [
+			{
+				"name": "GetNRTTables",
+				"description": "This activity will get all the NRT tables for whcih we need to do sync up between source and target servers.",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT [table_name], [source_name], [testing_flg]\n    FROM [dbo].[table_list] t\n    JOIN [dbo].[sources] s\n    ON t.source_id=s.source_id\n    WHERE [active_flag]=1\n    AND [adf_pipeline_type] = 'NRT'",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopNRTTablesCDC",
+				"description": "This activity will ingest the CDC load for NRT tables a regular interval in as per the trigger set for it.",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetNRTTables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetNRTTables').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 2,
+					"activities": [
+						{
+							"name": "ExecutePipelineNRTIncremental",
+							"description": "This activity will run the incremental pipeline for NRT tables",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "rt_source_to_shield_pipeline",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"table_name": {
+										"value": "@item().table_name",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@item().source_name",
+										"type": "Expression"
+									},
+									"Initialize_full_load": false,
+									"testing": {
+										"value": "@item().testing_flg",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/Other_Ingestions/Near_Real_Time"
+		},
+		"annotations": []
+	}
+}

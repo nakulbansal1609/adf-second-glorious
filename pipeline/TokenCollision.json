@@ -1,0 +1,167 @@
+{
+	"name": "TokenCollision",
+	"properties": {
+		"activities": [
+			{
+				"name": "GetPii",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pii_treatment"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "FilterTable",
+				"type": "Filter",
+				"dependsOn": [
+					{
+						"activity": "GetPii",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetPii').output.value",
+						"type": "Expression"
+					},
+					"condition": {
+						"value": "@equals(string(item().table_name), pipeline().parameters.table_name)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "FilterPartialTokens",
+				"type": "Filter",
+				"dependsOn": [
+					{
+						"activity": "FilterTable",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('FilterTable').output.value",
+						"type": "Expression"
+					},
+					"condition": {
+						"value": "@not(startswith(string(item().pii_stategy), 'partial'))",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "FilterPartialTokens",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('FilterPartialTokens').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Stored procedure1",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[shield_db].[test_token_collision]",
+								"storedProcedureParameters": {
+									"column": {
+										"value": {
+											"value": "@item().column_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"table": {
+										"value": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"run_id": {
+										"value": {
+											"value": "@pipeline().RunId",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.shield_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string",
+				"defaultValue": "NOVA_ncGrupp"
+			},
+			"source": {
+				"type": "string",
+				"defaultValue": "NOVA"
+			}
+		},
+		"folder": {
+			"name": "Testing_Pipelines"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-17T08:37:25Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

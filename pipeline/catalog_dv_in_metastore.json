@@ -1,0 +1,44 @@
+{
+	"name": "catalog_dv_in_metastore",
+	"properties": {
+		"activities": [
+			{
+				"name": "Catalog raw data vault",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "catalog_raw_vlt",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Catalog biz data vault",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Catalog raw data vault",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "catalog_biz_vlt",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault"
+		},
+		"annotations": []
+	}
+}

@@ -1,0 +1,1522 @@
+{
+	"name": "json_source_to_transient_pipeline",
+	"properties": {
+		"activities": [
+			{
+				"name": "SetDatabaseForLoad",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "database_name",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.system_db",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetServerForLoad",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "server_path",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.system_url",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "DateConditionalSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.date)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetCurrentTimestampFromParam",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@pipeline().parameters.date",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentTimestamp",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@utcnow()",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetTableMetadata",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetTableMetadata]",
+						"storedProcedureParameters": {
+							"SourceName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Env": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().globalParameters.environment",
+									"type": "Expression"
+								}
+							},
+							"catchup": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.catchup",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_tablelist",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "MasterRunIDSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.MasterRunID)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().parameters.MasterRunID",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().RunId",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetDBSchemaForLoad",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "database_schema",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.system_db_schema",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetSourceMaxTimestamp",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SetDatabaseForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetServerForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "CheckSourceTableNameFlag",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderQuery": {
+							"value": "SELECT COALESCE(max(@{activity('GetTableMetadata').output.firstRow.src_delta_column}), '@{activity('GetTableMetadata').output.firstRow.max_timestamp}' ) timestamp\nFROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')}",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "parameterized_source",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema": "@variables('database_schema')",
+							"table_name": "@pipeline().parameters.table_name",
+							"server_path": "@variables('server_path')",
+							"database_name": "@variables('database_name')"
+						}
+					}
+				}
+			},
+			{
+				"name": "CheckLoadTypeToIngest",
+				"description": "This activity will check the load type whether historical or incremental and will ingest data from source to transient accordingly",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "SetSQLQuery",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetTableMetadata').output.firstRow.load_type,'historical')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "StageToTransient",
+							"description": "This activity will read the input csv files created in previous step in a databricks notebook and will parse it before persisting in transient zone respective tables",
+							"type": "DatabricksNotebook",
+							"dependsOn": [
+								{
+									"activity": "GetTableNColumnNames",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "SourceToStage",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "UpdateSrcToStagePipelineLog",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"notebookPath": {
+									"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'creditinfo/json-parser')\n",
+									"type": "Expression"
+								},
+								"baseParameters": {
+									"filename_timestamp": {
+										"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+										"type": "Expression"
+									},
+									"parsing_format": {
+										"value": "@activity('GetParsingInfo').output.firstRow.parsing_string",
+										"type": "Expression"
+									},
+									"table_name": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"zone": {
+										"value": "@pipeline().globalParameters.transient_zone_name",
+										"type": "Expression"
+									},
+									"source_name": {
+										"value": "@activity('GetTableMetadata').output.firstRow.source_name",
+										"type": "Expression"
+									},
+									"country_name": {
+										"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+										"type": "Expression"
+									},
+									"year": {
+										"value": "@formatDateTime(variables('date'),'yyyy')",
+										"type": "Expression"
+									},
+									"month": {
+										"value": "@formatDateTime(variables('date'),'MM')",
+										"type": "Expression"
+									},
+									"day": {
+										"value": "@formatDateTime(variables('date'),'dd')",
+										"type": "Expression"
+									},
+									"csv_folder": "csv",
+									"table_column_names": {
+										"value": "@join(activity('GetTableNColumnNames').output.value,'|')",
+										"type": "Expression"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "databricks_cs",
+								"type": "LinkedServiceReference"
+							}
+						},
+						{
+							"name": "SourceToStage",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "@variables('sql_query')",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".txt"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": "@variables('database_schema')",
+										"table_name": "@pipeline().parameters.table_name",
+										"server_path": "@variables('server_path')",
+										"database_name": "@variables('database_name')"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "caelum_data_lake_csv",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": "@activity('GetTableMetadata').output.firstRow.country_name",
+										"zone": "@pipeline().globalParameters.transient_zone_name",
+										"source": "@pipeline().parameters.source",
+										"year": {
+											"value": "@formatDateTime(variables('date'),'yyyy')",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@formatDateTime(variables('date'),'MM')",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@formatDateTime(variables('date'),'dd')",
+											"type": "Expression"
+										},
+										"table": "@pipeline().parameters.table_name",
+										"file_timestamp": {
+											"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "GetTableNColumnNames",
+							"description": "This activity will read the adf metastore to fetch the information about all columns and tables present in CreditInfo metadata.",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SourceToStage",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "select [category], [table_name], [column_name], [parsing_string]\nfrom [dbo].[creditinfo_metadata]\nwhere [category] in ('xml_tags','collections', 'extra_inctl_cols');",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": ";;"
+									}
+								},
+								"firstRowOnly": false
+							}
+						},
+						{
+							"name": "UpdateSrcToStagePipelineLog",
+							"description": "This activity will update the pipeline logs for copying the data from source to stage paths",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SourceToStage",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "GetSourceCount_copy1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Source-To-Stage' StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'stage.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('SourceToStage').output.rowsCopied}' as rowsCopied,\n'@{activity('SourceToStage').output.rowsRead}' as RowsRead,\n'@{activity('SourceToStage').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToStage').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToStage').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToStage').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToStage').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToStage').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToStage').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToStage').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToStage').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToStage').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToStage').output.dataWritten),1048576)}' as data_volume_mb\nUNION\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'SourceCount' StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('SourceToStage').output.rowsCopied}' as rowsCopied,\n'@{activity('GetSourceCount_copy1').output.firstRow.counter}' as RowsRead,\n'@{activity('SourceToStage').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToStage').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToStage').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToStage').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToStage').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToStage').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToStage').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToStage').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToStage').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToStage').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToStage').output.dataWritten),1048576)}' as data_volume_mb;\n\nSELECT * FROM [dbo].[pipeline_log]\nWHERE pipeline_name='@{pipeline().RunId}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						},
+						{
+							"name": "UpdateStageToTransientPipelineLogs",
+							"description": "This activity will update the pipeline lgos for data of nested tables which is copied from stage to transient zones respectively.",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "StageToTransient",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						},
+						{
+							"name": "GetSourceCount_copy1",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "SELECT count(1) counter\nFROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')} \nWHERE @{activity('GetTableMetadata').output.firstRow.src_delta_column} BETWEEN \n'@{variables('reference_timestamp')}' AND '@{activity('GetSourceMaxTimestamp').output.firstRow.timestamp}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@variables('database_schema')",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@variables('server_path')",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@variables('database_name')",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SourceToTransient",
+							"description": "This activity will copy the data from source to transient zone for historical loads",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "@variables('sql_query')",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "ParquetSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings",
+										"blockSizeInMB": 100
+									},
+									"formatSettings": {
+										"type": "ParquetWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": "@variables('database_schema')",
+										"table_name": "@pipeline().parameters.table_name",
+										"server_path": "@variables('server_path')",
+										"database_name": "@variables('database_name')"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "caelum_data_lake",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.transient_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "@formatDateTime(variables('date'),'yyyy')\n",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@formatDateTime(variables('date'),'MM')",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@formatDateTime(variables('date'),'dd')",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "UpdatePipelineLog",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SourceToTransient",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "GetSourceCount",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Source-To-@{pipeline().globalParameters.transient_zone_name}' StepName,\n'source.@{variables('source_table_name')}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('SourceToTransient').output.rowsCopied}' as rowsCopied,\n'@{activity('SourceToTransient').output.rowsRead}' as RowsRead,\n'@{activity('SourceToTransient').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToTransient').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToTransient').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToTransient').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToTransient').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToTransient').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToTransient').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToTransient').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToTransient').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToTransient').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToTransient').output.dataWritten),1048576)}' as data_volume_mb\nUNION\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'SourceCount' StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('SourceToTransient').output.rowsCopied}' as rowsCopied,\n'@{activity('GetSourceCount').output.firstRow.counter}' as RowsRead,\n'@{activity('SourceToTransient').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToTransient').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToTransient').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToTransient').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToTransient').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToTransient').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToTransient').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToTransient').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToTransient').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToTransient').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToTransient').output.dataWritten),1048576)}' as data_volume_mb;\n\nSELECT * FROM [dbo].[pipeline_log]\nWHERE pipeline_name='@{pipeline().RunId}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						},
+						{
+							"name": "GetSourceCount",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "SELECT count(1) counter\nFROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')} \nWHERE @{activity('GetTableMetadata').output.firstRow.src_delta_column} BETWEEN \n'@{variables('reference_timestamp')}' AND '@{activity('GetSourceMaxTimestamp').output.firstRow.timestamp}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@variables('database_schema')",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@variables('server_path')",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@variables('database_name')",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetSQLQuery",
+				"description": "This activity will set the sql_query variable for the ingestion from source db",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetSourceMaxTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetParsingInfo",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetSourceMaxIndex",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "sql_query",
+					"value": {
+						"value": "SELECT ROW_NUMBER() OVER (ORDER BY [@{activity('GetTableMetadata').output.firstRow.src_index_column}]) [ROW_ID]\n,@{activity('GetParsingInfo').output.firstRow.column_name}\n,[@{activity('GetTableMetadata').output.firstRow.src_delta_column}] [ROW_CREATED_DATETIME]\nFROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')} \nWHERE @{activity('GetTableMetadata').output.firstRow.src_delta_column} BETWEEN \n'@{variables('reference_timestamp')}' AND '@{activity('GetSourceMaxTimestamp').output.firstRow.timestamp}'",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetParsingInfo",
+				"description": "This activity will fetch the data from creditinfo_metadata table to get info for columns and parsing strings",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckSourceTableNameFlag",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "IfMaxTimestampForInctl",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT [column_name],[parsing_string] \nFROM [dbo].[creditinfo_metadata] \nWHERE [category] = 'ingestion_columns' AND [table_name] = '@{pipeline().parameters.table_name}';",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": ";;"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetSourceMaxIndex",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SetDBSchemaForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetServerForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetDatabaseForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "CheckSourceTableNameFlag",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderQuery": {
+							"value": "SELECT COALESCE(max(@{activity('GetTableMetadata').output.firstRow.src_index_column}),0)+@{activity('GetTableMetadata').output.firstRow.max_index} max_index\nFROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')}",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "parameterized_source",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema": "@variables('database_schema')",
+							"table_name": "@pipeline().parameters.table_name",
+							"server_path": "@variables('server_path')",
+							"database_name": "@variables('database_name')"
+						}
+					}
+				}
+			},
+			{
+				"name": "UpdateMetadata",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckLoadTypeToIngest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "UPDATE adf_metastore.dbo.table_list SET max_timestamp='@{activity('GetSourceMaxTimestamp').output.firstRow.timestamp}',\nmax_index=@{activity('GetSourceMaxIndex').output.firstRow.max_index},\nprev_max_index=@{activity('GetTableMetadata').output.firstRow.max_index} \nWHERE table_name='@{pipeline().parameters.table_name}'; \nSELECT 1\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "CheckSourceTableNameFlag",
+				"description": "This activity will check the source tablename flag from adf metastore",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetTableMetadata').output.firstRow.src_table_name_flag,true)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetSourceTableNameAsInputParam",
+							"description": " This activity will set the value for source table name from netadata info",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "source_table_name",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetSourceTableNameFromMetastore",
+							"description": "This activity will set source table name with the value equal to that from adf metastore",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "source_table_name",
+								"value": {
+									"value": "@activity('GetTableMetadata').output.firstRow.src_table_name",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetTablePreTransformations",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckLoadTypeToIngest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetPreTransformations]",
+						"storedProcedureParameters": {
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "IfAnyPreTransformations",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTablePreTransformations",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetTablePreTransformations').output.firstRow.table_preTrans,null)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "DataPreTransformations_copy1",
+							"type": "DatabricksNotebook",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"notebookPath": {
+									"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'adf-pretransformations/adf_preTrans')",
+									"type": "Expression"
+								},
+								"baseParameters": {
+									"country": {
+										"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+										"type": "Expression"
+									},
+									"zone": {
+										"value": "@pipeline().globalParameters.transient_zone_name",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@pipeline().parameters.source",
+										"type": "Expression"
+									},
+									"year": {
+										"value": "@formatDateTime(variables('date'),'yyyy')",
+										"type": "Expression"
+									},
+									"month": {
+										"value": "@formatDateTime(variables('date'),'MM')",
+										"type": "Expression"
+									},
+									"day": {
+										"value": "@formatDateTime(variables('date'),'dd')",
+										"type": "Expression"
+									},
+									"table": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"file_timestamp": {
+										"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+										"type": "Expression"
+									},
+									"sql_definitions": {
+										"value": "@activity('GetTablePreTransformations').output.firstRow.table_preTrans",
+										"type": "Expression"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "databricks_cs",
+								"type": "LinkedServiceReference"
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetNestedColumns",
+				"description": "Lookup to check if the parent table has any nested tables derived out of array based columns",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckLoadTypeToIngest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetNestedColumnsTable]",
+						"storedProcedureParameters": {
+							"source_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"table_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopNestedTablesForPreTrans",
+				"description": "This will loop the execution of transient to raw to trusted pipeline for nested array columns ",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetNestedColumns",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetNestedColumns').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "GetNestedTablePreTransformations",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderStoredProcedureName": "[dbo].[GetPreTransformations]",
+									"storedProcedureParameters": {
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@{item().nested_columns}",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						},
+						{
+							"name": "IfAnyNestedPreTransformations",
+							"type": "IfCondition",
+							"dependsOn": [
+								{
+									"activity": "GetNestedTablePreTransformations",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@equals(activity('GetNestedTablePreTransformations').output.firstRow.table_preTrans,null)",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "DataPreTransformations_copy1_copy1",
+										"type": "DatabricksNotebook",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "7.00:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"notebookPath": "/caelum/adf-pretransformations/adf_preTrans",
+											"baseParameters": {
+												"country": {
+													"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+													"type": "Expression"
+												},
+												"zone": {
+													"value": "@pipeline().globalParameters.transient_zone_name",
+													"type": "Expression"
+												},
+												"source": {
+													"value": "@pipeline().parameters.source",
+													"type": "Expression"
+												},
+												"year": {
+													"value": "@formatDateTime(variables('date'),'yyyy')",
+													"type": "Expression"
+												},
+												"month": {
+													"value": "@formatDateTime(variables('date'),'MM')",
+													"type": "Expression"
+												},
+												"day": {
+													"value": "@formatDateTime(variables('date'),'dd')",
+													"type": "Expression"
+												},
+												"table": {
+													"value": "@{item().nested_columns}",
+													"type": "Expression"
+												},
+												"file_timestamp": {
+													"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+													"type": "Expression"
+												},
+												"sql_definitions": {
+													"value": "@activity('GetNestedTablePreTransformations').output.firstRow.table_preTrans",
+													"type": "Expression"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "databricks_cs",
+											"type": "LinkedServiceReference"
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "IfMaxTimestampForInctl",
+				"description": "This activity will set the max timestamp for incremental table to a value of max timestamp of historical tables if they are not default value",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetTableMetadata').output.firstRow.load_type,'incremental')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMaxTimestamp",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "reference_timestamp",
+								"value": {
+									"value": "@activity('GetTableMetadata').output.firstRow.max_timestamp",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "GetNestedTableMaxTimestamp",
+							"description": "This activity fetches the nested array columns if they are present for any parent table.",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderStoredProcedureName": "[dbo].[GetNestedTablesMaxTimestamp]",
+									"storedProcedureParameters": {
+										"source_name": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											}
+										},
+										"table_name": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											}
+										}
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							}
+						},
+						{
+							"name": "SetHistMaxTimestamp",
+							"description": "This will set the reference timestamp to the max value of historical timestamp",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetNestedTableMaxTimestamp",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "reference_timestamp",
+								"value": {
+									"value": "@activity('GetNestedTableMaxTimestamp').output.firstRow.max_timestamp",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string",
+				"defaultValue": "Responce"
+			},
+			"source": {
+				"type": "string",
+				"defaultValue": "CreditInfo"
+			},
+			"date": {
+				"type": "string"
+			},
+			"MasterRunID": {
+				"type": "string"
+			},
+			"catchup": {
+				"type": "string",
+				"defaultValue": "false"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"server_path": {
+				"type": "String"
+			},
+			"database_name": {
+				"type": "String"
+			},
+			"MasterRunID": {
+				"type": "String"
+			},
+			"database_schema": {
+				"type": "String"
+			},
+			"sql_query": {
+				"type": "String"
+			},
+			"source_table_name": {
+				"type": "String"
+			},
+			"reference_timestamp": {
+				"type": "String"
+			},
+			"transient_record_count": {
+				"type": "String",
+				"defaultValue": "0"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/1 source_to_transient"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-14T09:09:15Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

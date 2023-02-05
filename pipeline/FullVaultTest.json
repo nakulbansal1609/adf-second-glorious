@@ -1,0 +1,44 @@
+{
+	"name": "FullVaultTest",
+	"properties": {
+		"activities": [
+			{
+				"name": "RawVaultTest",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "RawVaultTest",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "BizVaultTest",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "RawVaultTest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "BizVaultTest",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"folder": {
+			"name": "Testing_Pipelines/VaultTest"
+		},
+		"annotations": []
+	}
+}

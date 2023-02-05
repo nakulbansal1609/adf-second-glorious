@@ -1,0 +1,1050 @@
+{
+	"name": "CondLogging_v2",
+	"properties": {
+		"activities": [
+			{
+				"name": "RawRejected_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.rowsWritten))} \nas rowsCopied,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten))} \nas RowsRead,\n1 as No_ParallelCopies,\n(@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.sinkProcessingTime)}+ @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time)})/1000 \nas copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'AdlsGen2' as Source_Type,\nCASE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),'SynapseSqlServer',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.store))}'\n\t\t\t\tWHEN 'AzureSqlMI' THEN 'SqlServer'\n\t\t\t\tWHEN 'SqlServer' THEN 'SqlServer'\n\t\t\t\tWHEN 'FileServer' THEN 'FileServer'\n\t\t\t\tWHEN 'SQLJSON' THEN 'SqlServer'\n\t\t\t\tWHEN 'RESTAPI' THEN 'RestApi'\n\t\t\t\tWHEN 'sqlserver' THEN 'SqlServer'\n\t\t\t\tWHEN 'ADLS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlServer'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n\t\t\t\tELSE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),'SynapseSqlServer',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.store))}'\n\t\t\t\tEND\nas Sink_Type,\n'@{if(contains('Succeeded Completed',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].progressState))),'Succeeded',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].progressState)))}' \nas Execution_Status,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),concat('CAST(CAST(''',string(pipeline().parameters.date), ''' AS DATETIME2) AS DATETIME)'),concat('CAST(CAST(''',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].lastUpdateTime), ''' AS DATETIME2) AS DATETIME)'))} \nas CopyActivity_Start_Time,\nCAST(CAST(DATEADD(ms,@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.sinkProcessingTime)} + @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time)},CAST(CAST('@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),pipeline().parameters.date,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].lastUpdateTime)}' AS DATETIME2) AS DATETIME)) AS DATETIME2) AS DATETIME)\nas CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.sinkProcessingTime))} \nas CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].bytesWritten)),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "TransientRejected_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.rowsWritten))} \nas rowsCopied,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten)}+@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.rowsWritten)} \nas RowsRead,\n1 as No_ParallelCopies,\n(@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.sinkProcessingTime)}+ @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time)})/1000 \nas copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'AdlsGen2' as Source_Type,\nCASE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.store))}' \n\t\t\t\tWHEN 'AzureSqlMI' THEN 'SqlServer'\n\t\t\t\tWHEN 'SqlServer' THEN 'SqlServer'\n\t\t\t\tWHEN 'FileServer' THEN 'FileServer'\n\t\t\t\tWHEN 'SQLJSON' THEN 'SqlServer'\n\t\t\t\tWHEN 'RESTAPI' THEN 'RestApi'\n\t\t\t\tWHEN 'sqlserver' THEN 'SqlServer'\n\t\t\t\tWHEN 'ADLS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlServer'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n\t\t\t\tELSE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.store))}'\n\t\t\t\tEND\nas Sink_Type,\n'@{if(contains('Succeeded Completed',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].progressState))),'Succeeded',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].progressState)))}' \nas Execution_Status,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),concat('CAST(CAST(''',string(pipeline().parameters.date), ''' AS DATETIME2) AS DATETIME)'),concat('CAST(CAST(''',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].lastUpdateTime), ''' AS DATETIME2) AS DATETIME)'))} \nas CopyActivity_Start_Time,\nCAST(CAST(DATEADD(ms,@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.sinkProcessingTime)} + @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time)},CAST(CAST('@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),pipeline().parameters.date,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].lastUpdateTime)}' AS DATETIME2) AS DATETIME)) AS DATETIME2) AS DATETIME)\nas CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.sinkProcessingTime))} \nas CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].bytesWritten)),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Shield_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-ToPII-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.rowsWritten))} \nas rowsCopied,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten)} + @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.rowsWritten)} \nas RowsRead,\n1 as No_ParallelCopies,\n(@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime)})/1000 \nas copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'AdlsGen2' as Source_Type,\nCASE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.store))}'\n\t\t\t\tWHEN 'SqlServer' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n\t\t\t\tELSE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.store))}'\n                END\nas Sink_Type,\n'@{if(contains('Succeeded Completed',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState))),'Succeeded',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState)))}' \nas Execution_Status,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),concat('CAST(CAST(''',string(pipeline().parameters.date), ''' AS DATETIME2) AS DATETIME)'),concat('CAST(CAST(''',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime), ''' AS DATETIME2) AS DATETIME)'))} \nas CopyActivity_Start_Time,\nCAST(CAST(DATEADD(ms,@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingtime)},CAST(CAST('@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),pipeline().parameters.date,pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime)}' AS DATETIME2) AS DATETIME)) AS DATETIME2) AS DATETIME)\nas CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime))} \nas CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'ShieldSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].bytesWritten)),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Trusted_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.trusted_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.trusted_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.rowsWritten))} \nas rowsCopied,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten))} \nas RowsRead,\n1 as No_ParallelCopies,\n(@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.sinkProcessingTime)}+ @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time)})/1000 \nas copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'AdlsGen2' as Source_Type,\nCASE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.store))}'\n\t\t\t\tWHEN 'SqlServer' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n\t\t\t\tELSE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.store))}'\nas Sink_Type,\n'@{if(contains('Succeeded Completed',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].progressState))),'Succeeded',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].progressState)))}' \nas Execution_Status,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),concat('CAST(CAST(''',string(pipeline().parameters.date), ''' AS DATETIME2) AS DATETIME)'),concat('CAST(CAST(''',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].lastUpdateTime), ''' AS DATETIME2) AS DATETIME)'))} \nas CopyActivity_Start_Time,\nCAST(CAST(DATEADD(ms,@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.sinkProcessingTime)} + @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time)},CAST(CAST('@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),pipeline().parameters.date,pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].lastUpdateTime)}' AS DATETIME2) AS DATETIME)) AS DATETIME2) AS DATETIME)\nas CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.sinkProcessingTime))} \nas CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TrustedZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].bytesWritten)),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Raw_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.raw_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten))} \nas rowsCopied,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten))} \nas RowsRead,\n1 as No_ParallelCopies,\n(@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime)}+ @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].time)})/1000 \nas copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\nCASE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.store))}'\n\t\t\t\tWHEN 'SqlServer' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n\t\t\t\tELSE '@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'sqlserver',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.store))}'\n                END \nas Sink_Type,\n'@{if(contains('Succeeded Completed',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].progressState))),'Succeeded',if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'Skipped',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].progressState)))}' \nas Execution_Status,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),concat('CAST(CAST(''',string(pipeline().parameters.date), ''' AS DATETIME2) AS DATETIME)'),concat('CAST(CAST(''',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].lastUpdateTime), ''' AS DATETIME2) AS DATETIME)'))} \nas CopyActivity_Start_Time,\nCAST(CAST(DATEADD(ms,@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime)} + @{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'TransientBadDataShield'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].time)},CAST(CAST('@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),pipeline().parameters.date,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].lastUpdateTime)}' AS DATETIME2) AS DATETIME)) AS DATETIME2) AS DATETIME)\nas CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n@{if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),'0',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime))} \nas CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(if(equals(indexof(string(pipeline().parameters.dataflow_metrics.runStatus.metrics),'RawZoneSink'),-1),0,pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].bytesWritten)),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Inserted",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "RawRejected_log",
+						"dependencyConditions": [
+							"Completed"
+						]
+					},
+					{
+						"activity": "TransientRejected_log",
+						"dependencyConditions": [
+							"Completed"
+						]
+					},
+					{
+						"activity": "Shield_log",
+						"dependencyConditions": [
+							"Completed"
+						]
+					},
+					{
+						"activity": "Trusted_log",
+						"dependencyConditions": [
+							"Completed"
+						]
+					},
+					{
+						"activity": "Raw_log",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * FROM [dbo].[pipeline_log]\nWHERE run_id = '@{pipeline().parameters.RunId}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			}
+		],
+		"parameters": {
+			"DataFactory_Name": {
+				"type": "object",
+				"defaultValue": "adf-lw-caelum-prod-dw"
+			},
+			"Pipeline_Name": {
+				"type": "object",
+				"defaultValue": "transient_to_raw_to_trusted"
+			},
+			"RunId": {
+				"type": "object",
+				"defaultValue": "c10db79e-ff85-4bff-97ef-db46abda817d"
+			},
+			"TriggerType": {
+				"type": "object",
+				"defaultValue": "PipelineActivity"
+			},
+			"TriggerId": {
+				"type": "object",
+				"defaultValue": "c348d903-cfd4-4ccb-923c-51bbbab2ffb1"
+			},
+			"TriggerName": {
+				"type": "object",
+				"defaultValue": "c348d903-cfd4-4ccb-923c-51bbbab2ffb1"
+			},
+			"TriggerTime": {
+				"type": "object",
+				"defaultValue": "2021-12-20T16:21:00.6288207Z"
+			},
+			"dataflow_metrics": {
+				"type": "object",
+				"defaultValue": {
+					"runStatus": {
+						"ClusterId": "0125-092725-n7iyuniw",
+						"computeAcquisitionDuration": 1317,
+						"version": "20220104.5",
+						"profile": {
+							"TransientBadDataShield": {
+								"computed": [],
+								"lineage": {
+									"pipeline_run_id": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DQFailReasonTransientBadDataShield",
+												"columns": [
+													"pipeline_run_id"
+												]
+											}
+										]
+									},
+									"ROW_ID": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"ROW_ID"
+												]
+											}
+										]
+									},
+									"dq_fail_reason": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DQFailReasonTransientBadDataShield",
+												"columns": [
+													"dq_fail_reason"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp_ENG": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp_ENG"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatus": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatus"
+												]
+											}
+										]
+									},
+									"PII_Placeholder": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"PII_Placeholder"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp"
+												]
+											}
+										]
+									}
+								},
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 7,
+								"updated": 7
+							},
+							"UnionBypassNonPIIBadData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 5
+							},
+							"UpdateROWID": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 1
+							},
+							"UnionBypassNonPIIgoodData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 5
+							},
+							"DQFailReasonTransientBadDataShield": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 2,
+								"total": 7,
+								"updated": 0
+							},
+							"CleanData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							},
+							"DQChecksNonPII@NonPIIGoodData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							},
+							"DQFailReasonRawBadDataShield": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 2,
+								"total": 7,
+								"updated": 0
+							},
+							"ShieldSink": {
+								"computed": [],
+								"lineage": {
+									"ROW_ID_ORIG": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"ROW_ID"
+												]
+											}
+										]
+									},
+									"ROW_ID_TOKEN": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"ROW_ID"
+												]
+											}
+										]
+									},
+									"PII_Placeholder_Token": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"PII_Placeholder"
+												]
+											}
+										]
+									},
+									"PII_Placeholder": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"PII_Placeholder"
+												]
+											}
+										]
+									}
+								},
+								"dropped": 0,
+								"drifted": 4,
+								"newer": 0,
+								"total": 4,
+								"updated": 4
+							},
+							"JoinToken": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 4,
+								"newer": 0,
+								"total": 4,
+								"updated": 0
+							},
+							"SelectOrigColumns": {
+								"computed": [],
+								"dropped": 4,
+								"drifted": 2,
+								"newer": 1,
+								"total": 2,
+								"updated": 1
+							},
+							"RawZoneSink": {
+								"computed": [],
+								"lineage": {
+									"ROW_ID": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"ROW_ID"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp_ENG": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp_ENG"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatus": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatus"
+												]
+											}
+										]
+									},
+									"PII_Placeholder": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"PII_Placeholder"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp"
+												]
+											}
+										]
+									}
+								},
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 5
+							},
+							"TokenCompute": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 1
+							},
+							"TrustedZoneSink": {
+								"computed": [],
+								"lineage": {
+									"ROW_ID": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"ROW_ID"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp_ENG": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp_ENG"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatus": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatus"
+												]
+											}
+										]
+									},
+									"PII_Placeholder": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"PII_Placeholder"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp"
+												]
+											}
+										]
+									}
+								},
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 5
+							},
+							"RawBadDataShield": {
+								"computed": [],
+								"lineage": {
+									"pipeline_run_id": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DQFailReasonRawBadDataShield",
+												"columns": [
+													"pipeline_run_id"
+												]
+											}
+										]
+									},
+									"ROW_ID": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"ROW_ID"
+												]
+											}
+										]
+									},
+									"dq_fail_reason": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DQFailReasonRawBadDataShield",
+												"columns": [
+													"dq_fail_reason"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp_ENG": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp_ENG"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatus": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatus"
+												]
+											}
+										]
+									},
+									"PII_Placeholder": {
+										"mapped": false,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"PII_Placeholder"
+												]
+											}
+										]
+									},
+									"\\u00C4rendestatusgrupp": {
+										"mapped": true,
+										"from": [
+											{
+												"source": "DataSource",
+												"columns": [
+													"\\u00C4rendestatusgrupp"
+												]
+											}
+										]
+									}
+								},
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 7,
+								"updated": 7
+							},
+							"SelectTokenColumns": {
+								"computed": [],
+								"dropped": 5,
+								"drifted": 2,
+								"newer": 2,
+								"total": 2,
+								"updated": 0
+							},
+							"DQChecksNonPII@NonPIIBadData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							},
+							"DqRuleSplit@GoodData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							},
+							"UnionBypassPIIBadData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 5
+							},
+							"DqRuleSplit@BypassBadData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							},
+							"DQChecksNonPII@BypassNonPIIBadData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							},
+							"UnionBypassPIIGoodData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 5
+							},
+							"DataSource": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 5,
+								"total": 5,
+								"updated": 0
+							},
+							"DqRuleSplit@BadData": {
+								"computed": [],
+								"dropped": 0,
+								"drifted": 5,
+								"newer": 0,
+								"total": 5,
+								"updated": 0
+							}
+						},
+						"metrics": {
+							"ShieldSink": {
+								"format": "table",
+								"stages": [
+									{
+										"stage": 4,
+										"partitionTimes": [
+											618
+										],
+										"recordsWritten": 184,
+										"lastUpdateTime": "2022-01-25 09:35:01.866",
+										"bytesWritten": 3424,
+										"recordsRead": 1,
+										"bytesRead": 3675,
+										"partitionStatus": "Success",
+										"streams": {
+											"ShieldSink": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "sink"
+											},
+											"JoinToken": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "join"
+											},
+											"SelectOrigColumns": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "select"
+											},
+											"DqRuleSplit@GoodData": {
+												"count": 184,
+												"cached": true,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "split"
+											},
+											"UnionBypassPIIGoodData": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "union"
+											}
+										},
+										"target": "ShieldSink",
+										"time": 720,
+										"progressState": "Completed"
+									}
+								],
+								"sinkPostProcessingTime": 0,
+								"store": "sqldw",
+								"rowsWritten": 184,
+								"details": {
+									"postSQLDuration": [
+										16
+									],
+									"preCommandsDuration": [
+										0
+									],
+									"tableOperationSQLDuration": [
+										1987
+									],
+									"writeStageDuration": [
+										3
+									],
+									"preSQLDuration": [
+										0
+									],
+									"tempTable": [
+										"shield_db.T_2100_10cadcc895294aab8e442e89cb0302cb"
+									],
+									"postCommandsDuration": [
+										0
+									]
+								},
+								"progressState": "Completed",
+								"sinkProcessingTime": 11654
+							},
+							"RawZoneSink": {
+								"format": "parquet",
+								"stages": [
+									{
+										"stage": 6,
+										"partitionTimes": [
+											605
+										],
+										"recordsWritten": 184,
+										"lastUpdateTime": "2022-01-25 09:35:13.787",
+										"bytesWritten": 6490,
+										"recordsRead": 1,
+										"bytesRead": 3734,
+										"partitionStatus": "Success",
+										"streams": {
+											"RawZoneSink": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "sink"
+											},
+											"TokenCompute": {
+												"count": 184,
+												"cached": true,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "derive"
+											}
+										},
+										"target": "RawZoneSink",
+										"time": 672,
+										"progressState": "Completed"
+									}
+								],
+								"sinkPostProcessingTime": 0,
+								"store": "adlsgen2",
+								"rowsWritten": 184,
+								"details": {
+									"postCommandsDuration": [
+										1
+									],
+									"mergeDuration": [
+										216
+									],
+									"preCommandsDuration": [
+										0
+									]
+								},
+								"progressState": "Completed",
+								"sinkProcessingTime": 1334
+							},
+							"TrustedZoneSink": {
+								"format": "parquet",
+								"stages": [
+									{
+										"stage": 8,
+										"partitionTimes": [
+											518
+										],
+										"recordsWritten": 184,
+										"lastUpdateTime": "2022-01-25 09:35:21.798",
+										"bytesWritten": 6490,
+										"recordsRead": 1,
+										"bytesRead": 3780,
+										"partitionStatus": "Success",
+										"streams": {
+											"TrustedZoneSink": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "sink"
+											},
+											"DQChecksNonPII@NonPIIGoodData": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "split"
+											},
+											"TokenCompute": {
+												"count": 184,
+												"cached": true,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "derive"
+											},
+											"UnionBypassNonPIIgoodData": {
+												"count": 184,
+												"cached": false,
+												"totalPartitions": 1,
+												"partitionStatus": "Success",
+												"partitionCounts": [
+													184
+												],
+												"type": "union"
+											}
+										},
+										"target": "TrustedZoneSink",
+										"time": 590,
+										"progressState": "Completed"
+									}
+								],
+								"sinkPostProcessingTime": 0,
+								"store": "adlsgen2",
+								"rowsWritten": 184,
+								"details": {
+									"postCommandsDuration": [
+										0
+									],
+									"mergeDuration": [
+										176
+									],
+									"preCommandsDuration": [
+										0
+									]
+								},
+								"progressState": "Completed",
+								"sinkProcessingTime": 1299
+							}
+						},
+						"clusterComputeId": "344e818c-5811-4c80-9b54-e5174872f572",
+						"dsl": "\nsource() ~> DataSource\n\nDataSource derive() ~> UpdateROWID\n\nUpdateROWID derive() ~> CleanData\n\nCleanData split() ~> DqRuleSplit@(GoodData, BypassBadData, BadData)\n\nDqRuleSplit@GoodData derive() ~> TokenCompute\n\nTokenCompute split() ~> DQChecksNonPII@(NonPIIGoodData, BypassNonPIIBadData, NonPIIBadData)\n\nDQChecksNonPII@NonPIIGoodData, DQChecksNonPII@BypassNonPIIBadData union() ~> UnionBypassNonPIIgoodData\n\nUnionBypassNonPIIgoodData sink() ~> TrustedZoneSink\n\nDQChecksNonPII@NonPIIBadData, DQChecksNonPII@BypassNonPIIBadData union() ~> UnionBypassNonPIIBadData\n\nUnionBypassNonPIIBadData derive() ~> DQFailReasonRawBadDataShield\n\nDQFailReasonRawBadDataShield sink() ~> RawBadDataShield\n\nTokenCompute select() ~> SelectTokenColumns\n\nTokenCompute sink() ~> RawZoneSink\n\nDqRuleSplit@GoodData, DqRuleSplit@BypassBadData union() ~> UnionBypassPIIGoodData\n\nUnionBypassPIIGoodData select() ~> SelectOrigColumns\n\nSelectOrigColumns, SelectTokenColumns join() ~> JoinToken\n\nJoinToken sink() ~> ShieldSink\n\nDqRuleSplit@BadData, DqRuleSplit@BypassBadData union() ~> UnionBypassPIIBadData\n\nUnionBypassPIIBadData derive() ~> DQFailReasonTransientBadDataShield\n\nDQFailReasonTransientBadDataShield sink() ~> TransientBadDataShield"
+					},
+					"effectiveIntegrationRuntime": "ahirq-lw-caelum-prod-dw-01 (West Europe)",
+					"billingReference": {
+						"activityType": "executedataflow",
+						"billableDuration": [
+							{
+								"meterType": "General",
+								"duration": 0.0836802,
+								"unit": "coreHour",
+								"sessionType": "WarmCluster"
+							}
+						]
+					},
+					"reportLineageToPurview": {
+						"status": "NotReported"
+					}
+				}
+			},
+			"table_name": {
+				"type": "object",
+				"defaultValue": "KFM_DEBT_EXTRACT_ERROR"
+			},
+			"date": {
+				"type": "object",
+				"defaultValue": "2022-01-20 08:03:57.860"
+			}
+		},
+		"variables": {
+			"dt2": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "audit_logging"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-12-20T14:08:07Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

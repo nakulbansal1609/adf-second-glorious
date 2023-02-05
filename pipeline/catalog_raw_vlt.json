@@ -1,0 +1,108 @@
+{
+	"name": "catalog_raw_vlt",
+	"properties": {
+		"activities": [
+			{
+				"name": "Catalog raw tables",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": "SELECT HASHBYTES('MD5', TABLE_NAME) bv_raw_source_id, table_name\nFROM INFORMATION_SCHEMA.TABLES\nWHERE TABLE_SCHEMA='raw'",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"sqlWriterStoredProcedureName": "[dbo].[spUpsertSourceTables]",
+						"sqlWriterTableType": "source_tables_type",
+						"storedProcedureTableTypeParameterName": "source_tables",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "data_vault_db",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "INFORMATION_SCHEMA.TABLES",
+							"SCHEMA_NAME": "dbo",
+							"dw_db_name": {
+								"value": "@pipeline().globalParameters.dw_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "source_tables_type",
+							"schema_name": "dv"
+						}
+					}
+				]
+			},
+			{
+				"name": "Insert new columns into source mapping table",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Catalog raw tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "  MERGE [dv].[bv_source] AS target_sqldb\n  USING [dv].[bv_raw_source] AS source_tblstg\n  ON (target_sqldb.bv_raw_source_id= source_tblstg.bv_raw_source_id)\n  WHEN NOT MATCHED THEN\n      INSERT (\n          [bv_source_def],\n          [bv_raw_source_id]\n        )\n      VALUES (\n          NULL,\n          source_tblstg.bv_raw_source_id\n        ); SELECT 1",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "bv_source",
+							"schema_name": "dv"
+						}
+					}
+				}
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/biz vault"
+		},
+		"annotations": []
+	}
+}

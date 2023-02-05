@@ -1,0 +1,35 @@
+{
+	"name": "trusted_to_ext_tables",
+	"properties": {
+		"activities": [
+			{
+				"name": "data_vault_staging_build",
+				"description": "Pipeline meant to load trusted parquet files into synapse external tables and Databricks tables.",
+				"type": "DatabricksNotebook",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebookPath": {
+						"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'data-vault-staging-build')",
+						"type": "Expression"
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "databricks_cs",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}

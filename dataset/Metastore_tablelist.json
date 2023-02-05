@@ -1,0 +1,17 @@
+{
+	"name": "Metastore_tablelist",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "metastore",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "table_list"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

@@ -1,0 +1,56 @@
+{
+	"name": "caelum_data_lake_purge",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "datalake",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"country": {
+				"type": "string"
+			},
+			"zone": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string"
+			},
+			"year": {
+				"type": "string"
+			},
+			"month": {
+				"type": "string"
+			},
+			"day": {
+				"type": "string"
+			},
+			"table": {
+				"type": "string"
+			},
+			"file_timestamp": {
+				"type": "string"
+			},
+			"adls_dw_container_name": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Parquet",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": {
+					"value": "@concat('dw_data_store/',dataset().zone,'/',dataset().country,'/',dataset().source,'/',dataset().table,'/',dataset().year,'/',dataset().month,'/',dataset().day)",
+					"type": "Expression"
+				},
+				"fileSystem": {
+					"value": "@dataset().adls_dw_container_name",
+					"type": "Expression"
+				}
+			},
+			"compressionCodec": "none"
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

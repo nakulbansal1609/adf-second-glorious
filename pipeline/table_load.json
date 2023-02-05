@@ -1,0 +1,918 @@
+{
+	"name": "table_load",
+	"properties": {
+		"activities": [
+			{
+				"name": "Generate sql",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[sp_generate_mart_sql]",
+						"storedProcedureParameters": {
+							"query_eval": {
+								"type": "Int32",
+								"value": "0"
+							},
+							"table_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "DIM_Event"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Get table type",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Generate sql",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT [table_type_name]\n  FROM [dv].[mart_target_tables] l \n  JOIN dv.mart_table_types r\n  on l.[table_type_id]=r.[table_type_id]\n  WHERE table_name='@{pipeline().parameters.table_name}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "s"
+						}
+					}
+				}
+			},
+			{
+				"name": "Loop thorugh all mappings",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get table type",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "MasterRunIDSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Generate sql').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Table type change",
+							"type": "Switch",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@activity('Get table type').output.firstRow.table_type_name",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "SCD1",
+										"activities": [
+											{
+												"name": "GetSCD1Parameters",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "select natural_key_list as source_business_key, target_business_key, mm.source_id from [dv].[mart_lookup] ml\njoin [dv].[mart_column_map] mcm\non ml.lookup_table_name = mcm.table_name\njoin [dv].[mart_map] mm\non ml.lookup_table_name = mm.target_table_name \nwhere ml.lookup_table_name = '@{pipeline().parameters.table_name}'",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											},
+											{
+												"name": "Load SCD1 sp",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "GetSCD1Parameters",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_scd1_load]",
+													"storedProcedureParameters": {
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"source_business_key": {
+															"value": {
+																"value": "@activity('GetSCD1Parameters').output.firstRow.source_business_key",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@activity('Generate sql').output.value[0].sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_business_key": {
+															"value": {
+																"value": "@activity('GetSCD1Parameters').output.firstRow.target_business_key",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": {
+																"value": "@pipeline().parameters.schema_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"source_id": {
+															"value": {
+																"value": "@activity('GetSCD1Parameters').output.firstRow.source_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "SCD2",
+										"activities": [
+											{
+												"name": "Load SCD2 sp",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "GetSCD2Parameters",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "GetTokens",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_scd2_load]",
+													"storedProcedureParameters": {
+														"detoken_list_str": {
+															"value": {
+																"value": "@activity('GetTokens').output.firstRow.detoken_list_str",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"key_type": {
+															"value": {
+																"value": "hash",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"source_business_key": {
+															"value": {
+																"value": "@activity('GetSCD2Parameters').output.firstRow.source_business_key",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@activity('Generate sql').output.value[0].sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_business_key": {
+															"value": {
+																"value": "@activity('GetSCD2Parameters').output.firstRow.target_business_key",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": {
+																"value": "@pipeline().parameters.schema_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"source_id": {
+															"value": {
+																"value": "@activity('GetSCD2Parameters').output.firstRow.source_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
+												"name": "GetSCD2Parameters",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "select natural_key_list as source_business_key, target_business_key, mm.source_id as source_id from [dv].[mart_lookup] ml\njoin [dv].[mart_column_map] mcm\non ml.lookup_table_name = mcm.table_name\njoin [dv].[mart_map] mm\non ml.lookup_table_name = mm.target_table_name \nwhere ml.lookup_table_name = '@{pipeline().parameters.table_name}'",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											},
+											{
+												"name": "GetTokens",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "select concat('',string_agg(column_name, ',')) as detoken_list_str from [dv].[mart_column_map] where table_name = '@{pipeline().parameters.table_name}' and mapping_type = 'TOKEN_LOOKUP'",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											}
+										]
+									},
+									{
+										"value": "FACT",
+										"activities": [
+											{
+												"name": "Load Fact",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "GetFACTParameters",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "GetTokensFACT",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "Get_Fact_pk_list",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_fact_load]",
+													"storedProcedureParameters": {
+														"detoken_list_str": {
+															"value": {
+																"value": "@activity('GetTokensFACT').output.firstRow.detoken_list_str",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"pk_list": {
+															"value": {
+																"value": "@activity('Get_Fact_pk_list').output.firstRow.pk_list",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"source_id": {
+															"value": {
+																"value": "@activity('GetFACTParameters').output.firstRow.source_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@activity('Generate sql').output.value[0].sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_date_name": {
+															"value": {
+																"value": "@activity('GetFACTParameters').output.firstRow.target_date_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": {
+																"value": "@pipeline().parameters.schema_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
+												"name": "GetFACTParameters",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "SELECT fact_date_field as target_date_name, source_id FROM adf_metastore.dv.mart_map\nwhere target_table_name = '@{pipeline().parameters.table_name}'\n",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											},
+											{
+												"name": "GetTokensFACT",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "select concat('',string_agg(column_name, ',')) as detoken_list_str from [dv].[mart_column_map] where table_name = '@{pipeline().parameters.table_name}' and mapping_type = 'TOKEN_LOOKUP'",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											},
+											{
+												"name": "Get_Fact_pk_list",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "SELECT concat('',string_agg(column_name, ',')) as pk_list\nFROM adf_metastore.dv.mart_target_col\nwhere table_name = '@{pipeline().parameters.table_name}' and pk_flag = 1",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											}
+										]
+									},
+									{
+										"value": "CALENDAR",
+										"activities": [
+											{
+												"name": "Stored procedure1",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_load_calendar]",
+													"storedProcedureParameters": {
+														"end_date": {
+															"value": "01-01-2020",
+															"type": "DateTime"
+														},
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"start_date": {
+															"value": "01-01-2010",
+															"type": "DateTime"
+														},
+														"target_schema": {
+															"value": "mart",
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "FACTLESS FACT",
+										"activities": [
+											{
+												"name": "Load FACTLESS FACT",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "GetFACTLESS_FACTParameters",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "Get_factless_Fact_pk_list",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													},
+													{
+														"activity": "GetTokensFACTLESS_FACT",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_fact_load]",
+													"storedProcedureParameters": {
+														"detoken_list_str": {
+															"value": {
+																"value": "@activity('GetTokensFACTLESS_FACT').output.firstRow.detoken_list_str",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"pk_list": {
+															"value": {
+																"value": "@activity('Get_factless_Fact_pk_list').output.firstRow.pk_list",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"source_id": {
+															"value": "NOVA",
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@activity('Generate sql').output.value[0].sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_date_name": {
+															"value": {
+																"value": "@activity('GetFACTLESS_FACTParameters').output.firstRow.target_date_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": "mart",
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
+												"name": "GetFACTLESS_FACTParameters",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "SELECT fact_date_field as target_date_name FROM adf_metastore.dv.mart_map\nwhere target_table_name = '@{pipeline().parameters.table_name}'\n",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											},
+											{
+												"name": "GetTokensFACTLESS_FACT",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "select concat('',string_agg(column_name, ',')) as detoken_list_str from [dv].[mart_column_map] where table_name = '@{pipeline().parameters.table_name}' and mapping_type = 'TOKEN_LOOKUP'",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											},
+											{
+												"name": "Get_factless_Fact_pk_list",
+												"type": "Lookup",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "SELECT concat('',string_agg(column_name, ',')) as pk_list\nFROM adf_metastore.dv.mart_target_col\nwhere table_name = '@{pipeline().parameters.table_name}' and pk_flag = 1",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"dataset": {
+														"referenceName": "Metastore",
+														"type": "DatasetReference",
+														"parameters": {
+															"table_name": "''"
+														}
+													},
+													"firstRowOnly": true
+												}
+											}
+										]
+									}
+								]
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "MasterRunIDSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.MasterRunID)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "55555",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "555555",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string",
+				"defaultValue": "DIM_Case"
+			},
+			"MasterRunID": {
+				"type": "string",
+				"defaultValue": "4_11_2021"
+			},
+			"schema_name": {
+				"type": "string",
+				"defaultValue": "mart_copy"
+			}
+		},
+		"variables": {
+			"MasterRunID": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/information_mart"
+		},
+		"annotations": []
+	}
+}

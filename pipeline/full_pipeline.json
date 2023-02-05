@@ -1,0 +1,753 @@
+{
+	"name": "full_pipeline",
+	"properties": {
+		"description": "This is the pipeline to run sql and api based ingestion source types.",
+		"activities": [
+			{
+				"name": "SetCurrentTimestamp",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "resumeSynapse",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date",
+					"value": {
+						"value": "@utcnow()",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetTableMetadata",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "resumeSynapse",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetTableMetadata]",
+						"storedProcedureParameters": {
+							"SourceName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Env": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().globalParameters.environment",
+									"type": "Expression"
+								}
+							},
+							"catchup": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.catchup",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_tablelist",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "AnonConditional",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "TransientToRawToTrusted",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('anonimization'),'true')",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "DataAnonimization",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "get_anon_logs",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SwitchSourceToTransient",
+				"description": "This is a switch activity to run the SourceToTransient pipeline based on the injestion type either 'sql' or 'api'.\nNote:\nDefault or 'sql' are same",
+				"type": "Switch",
+				"dependsOn": [
+					{
+						"activity": "PurgeTransientFiles",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"on": {
+						"value": "@activity('GetTableMetadata').output.firstRow.injestion_type",
+						"type": "Expression"
+					},
+					"cases": [
+						{
+							"value": "api",
+							"activities": [
+								{
+									"name": "APISourceToTransient",
+									"description": "This pipeline is to run the injestion of data from REST APIs to the transient zone and will further process them in downsteam pipelines",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "api_source_to_transient",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"source": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											},
+											"table_name": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"date": {
+												"value": "@variables('date')",
+												"type": "Expression"
+											},
+											"MasterRunID": {
+												"value": "@pipeline().RunId",
+												"type": "Expression"
+											},
+											"catchup": {
+												"value": "@pipeline().parameters.catchup",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						},
+						{
+							"value": "sqljson",
+							"activities": [
+								{
+									"name": "SQLJSONSourceToTransient",
+									"description": "This activity will execute the pipeline for CreditInfo source to transient that caters for sql and json format of data at same time.",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "json_source_to_transient_pipeline",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"table_name": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"source": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											},
+											"date": {
+												"value": "@variables('date')",
+												"type": "Expression"
+											},
+											"MasterRunID": {
+												"value": "@pipeline().RunId",
+												"type": "Expression"
+											},
+											"catchup": {
+												"value": "@pipeline().parameters.catchup",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						},
+						{
+							"value": "file_system",
+							"activities": [
+								{
+									"name": "ReferenceSourceToTransient",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "reference_source_to_transient_pipeline",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"source": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											},
+											"date": {
+												"value": "@variables('date')",
+												"type": "Expression"
+											},
+											"MasterRunID": {
+												"value": "@pipeline().RunId",
+												"type": "Expression"
+											},
+											"table_name": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"catchup": {
+												"value": "@pipeline().parameters.catchup",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					],
+					"defaultActivities": [
+						{
+							"name": "SQLSourceToTransient",
+							"description": "This activity will execute the injestion pipeline taht reads the data from the SQL based sources and stage them on Transient Zone for further processing.",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "source_to_transient_pipeline",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"table_name": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@pipeline().parameters.source",
+										"type": "Expression"
+									},
+									"date": {
+										"value": "@variables('date')",
+										"type": "Expression"
+									},
+									"MasterRunID": {
+										"value": "@pipeline().RunId",
+										"type": "Expression"
+									},
+									"testing_run_id": {
+										"value": "@pipeline().parameters.iterator_run_id",
+										"type": "Expression"
+									},
+									"catchup": {
+										"value": "@pipeline().parameters.catchup",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetNestedColumns",
+				"description": "Lookup to check if the parent table has any nested tables derived out of array based columns",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SwitchSourceToTransient",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetNestedColumnsTable]",
+						"storedProcedureParameters": {
+							"source_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"table_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopNestedTables",
+				"description": "This will loop the execution of transient to raw to trusted pipeline for nested array columns ",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetNestedColumns",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetNestedColumns').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "CheckChildTablesExistence_copy1",
+							"type": "IfCondition",
+							"dependsOn": [
+								{
+									"activity": "Set Source_copy2",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@equals(item().nested_columns,'NULL')",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "TransientToRawToTrustedNested_v2_copy1",
+										"description": "This activity is to execute the pipeline for moving data from transient to trusted",
+										"type": "ExecutePipeline",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"pipeline": {
+												"referenceName": "transient_to_raw_to_trusted",
+												"type": "PipelineReference"
+											},
+											"waitOnCompletion": true,
+											"parameters": {
+												"date": {
+													"value": "@variables('date')",
+													"type": "Expression"
+												},
+												"source": {
+													"value": "@pipeline().parameters.source",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "@variables('nested_source')",
+													"type": "Expression"
+												},
+												"MasterRunID": {
+													"value": "@pipeline().RunId",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								]
+							}
+						},
+						{
+							"name": "Set Source_copy2",
+							"type": "IfCondition",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@not(equals(pipeline().parameters.source, 'UBW'))",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "Set Source Ubw_v2_copy1",
+										"type": "SetVariable",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"variableName": "nested_source",
+											"value": {
+												"value": "@CONCAT(pipeline().parameters.table_name,'_',item().nested_columns)",
+												"type": "Expression"
+											}
+										}
+									}
+								],
+								"ifTrueActivities": [
+									{
+										"name": "Set Source Nova_v2_copy1",
+										"type": "SetVariable",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"variableName": "nested_source",
+											"value": {
+												"value": "@{item().nested_columns}",
+												"type": "Expression"
+											}
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "IfSQLJsonPlusHist",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "TransientToRawToTrusted",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@and(equals(activity('GetTableMetadata').output.firstRow.injestion_type,'sqljson'),equals(activity('GetTableMetadata').output.firstRow.load_type,'historical'))",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "UpdateActiveFlag",
+							"description": "This activity will update the active flag once the historical ingestion is completed",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "UPDATE [dbo].[table_list]\nSET [active_flag] = 0\nWHERE [table_name] = '@{pipeline().parameters.table_name}' ;\nSELECT 1",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": ";;"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "PurgeTransientFiles",
+				"type": "Delete",
+				"dependsOn": [
+					{
+						"activity": "SetCurrentTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "caelum_data_lake_table_lvl",
+						"type": "DatasetReference",
+						"parameters": {
+							"country": {
+								"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+								"type": "Expression"
+							},
+							"zone": "transient",
+							"source": {
+								"value": "@activity('GetTableMetadata').output.firstRow.source_name",
+								"type": "Expression"
+							},
+							"table": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"adls_dw_container_name": {
+								"value": "@pipeline().globalParameters.adls_dw_container_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"logStorageSettings": {
+						"linkedServiceName": {
+							"referenceName": "datalake",
+							"type": "LinkedServiceReference"
+						},
+						"path": "fs01-dlalwcaelumdevdw01/purge_logs/rollbacks"
+					},
+					"enableLogging": true,
+					"storeSettings": {
+						"type": "AzureBlobFSReadSettings",
+						"recursive": true,
+						"enablePartitionDiscovery": false
+					}
+				}
+			},
+			{
+				"name": "resumeSynapse",
+				"description": "resumes synlwcaelumdevdwsql sql pool in case it's paused",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "resumeSynapse",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "IfIncrementalCopyDataToStageSynapse",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "TransientToRawToTrusted",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@and(equals(activity('GetTableMetadata').output.firstRow.load_type,'incremental'),equals(pipeline().parameters.load_synapse,'1'))",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "ExecuteCopyActivity",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "incr_load_to_syn",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"date": {
+										"value": "@variables('date')",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@pipeline().parameters.source",
+										"type": "Expression"
+									},
+									"table_name": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"MasterRunID": {
+										"value": "@pipeline().RunId",
+										"type": "Expression"
+									},
+									"country_name": {
+										"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "TransientToRawToTrusted",
+				"description": "This activity will move data from transient and transform before persisting it on raw/trusted/shield zones respectively",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "SwitchSourceToTransient",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "transient_to_raw_to_trusted",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"date": {
+							"value": "@variables('date')",
+							"type": "Expression"
+						},
+						"source": {
+							"value": "@pipeline().parameters.source",
+							"type": "Expression"
+						},
+						"table_name": {
+							"value": "@pipeline().parameters.table_name",
+							"type": "Expression"
+						},
+						"MasterRunID": {
+							"value": "@pipeline().RunId",
+							"type": "Expression"
+						},
+						"catchup": {
+							"value": "@pipeline().parameters.catchup",
+							"type": "Expression"
+						}
+					}
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string",
+				"defaultValue": "CreditInfo"
+			},
+			"testing": {
+				"type": "string",
+				"defaultValue": "1"
+			},
+			"iterator_run_id": {
+				"type": "string",
+				"defaultValue": "cs_sit_0929"
+			},
+			"load_synapse": {
+				"type": "string",
+				"defaultValue": "0"
+			},
+			"catchup": {
+				"type": "string",
+				"defaultValue": "false"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"anonimization": {
+				"type": "String",
+				"defaultValue": "false"
+			},
+			"nested_source": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/end_to_end"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-17T08:37:25Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

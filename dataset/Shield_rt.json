@@ -1,0 +1,40 @@
+{
+	"name": "Shield_rt",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "shield_db",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"database_name": {
+					"value": "@dataset().shield_db_name",
+					"type": "Expression"
+				}
+			}
+		},
+		"parameters": {
+			"TABLE_NAME": {
+				"type": "string"
+			},
+			"db_schema": {
+				"type": "string"
+			},
+			"shield_db_name": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "AzureSqlDWTable",
+		"schema": [],
+		"typeProperties": {
+			"schema": {
+				"value": "@dataset().db_schema",
+				"type": "Expression"
+			},
+			"table": {
+				"value": "@dataset().TABLE_NAME",
+				"type": "Expression"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

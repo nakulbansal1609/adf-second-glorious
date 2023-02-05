@@ -1,0 +1,578 @@
+{
+	"name": "reference_switch_pipe_source_to_transient",
+	"properties": {
+		"activities": [
+			{
+				"name": "SwitchReferenceActivitiesBasedOnTableName",
+				"type": "Switch",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"on": {
+						"value": "@pipeline().parameters.table_name",
+						"type": "Expression"
+					},
+					"cases": [
+						{
+							"value": "swe_cs_users",
+							"activities": [
+								{
+									"name": "CopyDataFromFileSystem_StagingDB_IamToo",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "SetIAmTooDatabaseForLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "SetIAmTooStagingServerForLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "SetStagingDBShemaForLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "SetIAmTooStagingMetastoreTableName",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "SetIAmTooObfuscationDatabaseForLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "SetIAmTooObfuscationUDFForLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										},
+										{
+											"activity": "SetStagingObfuscationDBShemaForLoad",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"storeSettings": {
+												"type": "FileServerReadSettings",
+												"recursive": true,
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"sink": {
+											"type": "SqlServerSink",
+											"preCopyScript": {
+												"value": "DELETE FROM [@{variables('staging_database_schema')}].[@{variables('staging_table_name')}]",
+												"type": "Expression"
+											},
+											"writeBehavior": "insert",
+											"sqlWriterUseTableLock": false
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_filesystem_referencedata",
+											"type": "DatasetReference",
+											"parameters": {
+												"FileName": {
+													"value": "@pipeline().parameters.FileName",
+													"type": "Expression"
+												},
+												"country": {
+													"value": "@pipeline().parameters.country",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "parameterized_source",
+											"type": "DatasetReference",
+											"parameters": {
+												"schema": {
+													"value": "@variables('staging_database_schema')",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "@variables('staging_table_name')",
+													"type": "Expression"
+												},
+												"server_path": {
+													"value": "@variables('staging_server_path')",
+													"type": "Expression"
+												},
+												"database_name": {
+													"value": "@variables('staging_database_name')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "SetIAmTooDatabaseForLoad",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_database_name",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'IAMToo_stage','NOVADB')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetIAmTooStagingServerForLoad",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_server_path",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'LWSQLDEV075.intad1.com','LWSQLPRD068.intad')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetStagingDBShemaForLoad",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_database_schema",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'stage','dbo')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetIAmTooStagingMetastoreTableName",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_table_name",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'swe_cs_users','swe_cs_users')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetIAmTooObfuscationDatabaseForLoad",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_obfuscation_database_name",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'Obfuscated_IAMToo','')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetIAmTooObfuscationUDFForLoad",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_udf_name",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'udf_swe_cs_users','')",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetStagingObfuscationDBShemaForLoad",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "staging_obfuscation_database_schema",
+										"value": {
+											"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'dbo','')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					],
+					"defaultActivities": [
+						{
+							"name": "UpdateMetadata",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "CopyDataFromFileSystem_csv",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "UPDATE adf_metastore.dbo.table_list SET max_timestamp='@{pipeline().parameters.lastModified}',\nmax_index=@{activity('CopyDataFromFileSystem_csv').output.rowsCopied},\nprev_max_index=@{pipeline().parameters.prev_max_index} \nWHERE table_name='@{pipeline().parameters.table_name}'; \nSELECT 1\n",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							}
+						},
+						{
+							"name": "CopyDataFromFileSystem_csv",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "DelimitedTextSource",
+									"storeSettings": {
+										"type": "FileServerReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "DelimitedTextReadSettings"
+									}
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".txt"
+									}
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "ds_filesystem_referencedata",
+									"type": "DatasetReference",
+									"parameters": {
+										"FileName": {
+											"value": "@pipeline().parameters.FileName",
+											"type": "Expression"
+										},
+										"country": {
+											"value": "@pipeline().parameters.country",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "caelum_data_lake_csv",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@pipeline().parameters.country",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.transient_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "@pipeline().parameters.year",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@pipeline().parameters.month",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@pipeline().parameters.day",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "@pipeline().parameters.timestamp",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "UpdatePipelineLog",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "CopyDataFromFileSystem_csv",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().parameters.MasterRunID}' as RunId,\n'Source-To-@{pipeline().globalParameters.transient_zone_name}' as StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('CopyDataFromFileSystem_csv').output.rowsCopied}' as rowsCopied,\n'@{activity('CopyDataFromFileSystem_csv').output.rowsRead}' as RowsRead,\n'@{activity('CopyDataFromFileSystem_csv').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('CopyDataFromFileSystem_csv').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('CopyDataFromFileSystem_csv').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('CopyDataFromFileSystem_csv').output.dataWritten),1048576)}' as data_volume_mb\n--,' ' as output_url\nUNION\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().parameters.MasterRunID}' as RunId,\n'SourceCount' as StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'NA' as rowsCopied,\n'NA' as RowsRead,\n'@{activity('CopyDataFromFileSystem_csv').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('CopyDataFromFileSystem_csv').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('CopyDataFromFileSystem_csv').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\nCASE '@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].source.type}'\n\t\t\t\tWHEN 'AzureSqlMI' THEN 'SqlServer'\n\t\t\t\tWHEN 'SqlServer' THEN 'SqlServer'\n\t\t\t\tWHEN 'FileServer' THEN 'FileServer'\n\t\t\t\tWHEN 'SQLJSON' THEN 'SqlServer'\n\t\t\t\tWHEN 'RESTAPI' THEN 'RestApi'\n\t\t\t\tWHEN 'sqlserver' THEN 'SqlServer'\n\t\t\t\tWHEN 'ADLS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlServer'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n                ELSE '@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].source.type}'\n                END as Source_Type, \nCASE '@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].sink.type}' \n\t\t\t\tWHEN 'SqlServer' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN 'adlsgen2' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'AzureBlobFS' THEN 'AdlsGen2'\n\t\t\t\tWHEN 'sqldw' THEN 'SynapseSqlPool'\n\t\t\t\tWHEN '' THEN 'N/A'\n\t\t\t\tWHEN NULL THEN  'N/A'\n\t\t\t\tELSE '@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].sink.type}' \n                END\nas Sink_Type,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('CopyDataFromFileSystem_csv').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('CopyDataFromFileSystem_csv').output.dataWritten),1048576)}' as data_volume_mb\n;\nSELECT * FROM [dbo].[pipeline_log]\nWHERE pipeline_name='@{pipeline().RunId}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "IfTableIsIAmToo_ExecuteClientExclusion",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "SwitchReferenceActivitiesBasedOnTableName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(pipeline().parameters.table_name,'swe_cs_users')",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "ExecutePipelineForIAmTooClientExclusion",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "IAmToo_client_exclusion",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"year": {
+										"value": "@pipeline().parameters.year",
+										"type": "Expression"
+									},
+									"month": {
+										"value": "@pipeline().parameters.month",
+										"type": "Expression"
+									},
+									"day": {
+										"value": "@pipeline().parameters.day",
+										"type": "Expression"
+									},
+									"country": {
+										"value": "@pipeline().parameters.country",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@pipeline().parameters.source",
+										"type": "Expression"
+									},
+									"table_name": {
+										"value": "@pipeline().parameters.table_name",
+										"type": "Expression"
+									},
+									"timestamp": {
+										"value": "@pipeline().parameters.timestamp",
+										"type": "Expression"
+									},
+									"prev_max_index": {
+										"value": "@pipeline().parameters.prev_max_index",
+										"type": "Expression"
+									},
+									"MasterRunId": {
+										"value": "@pipeline().parameters.MasterRunID",
+										"type": "Expression"
+									},
+									"lastModified": {
+										"value": "@pipeline().parameters.lastModified",
+										"type": "Expression"
+									},
+									"staging_obfuscation_database_schema": {
+										"value": "@variables('staging_obfuscation_database_schema')",
+										"type": "Expression"
+									},
+									"staging_table_name": {
+										"value": "@variables('staging_table_name')",
+										"type": "Expression"
+									},
+									"staging_server_path": {
+										"value": "@variables('staging_server_path')",
+										"type": "Expression"
+									},
+									"staging_obfuscation_database_name": {
+										"value": "@variables('staging_obfuscation_database_name')",
+										"type": "Expression"
+									},
+									"staging_udf_name": {
+										"value": "@variables('staging_udf_name')",
+										"type": "Expression"
+									},
+									"staging_database_schema": {
+										"value": "@variables('staging_database_schema')",
+										"type": "Expression"
+									},
+									"staging_database_name": {
+										"value": "@variables('staging_database_name')",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"FileName": {
+				"type": "string"
+			},
+			"country": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string"
+			},
+			"year": {
+				"type": "string"
+			},
+			"month": {
+				"type": "string"
+			},
+			"day": {
+				"type": "string"
+			},
+			"table_name": {
+				"type": "string"
+			},
+			"timestamp": {
+				"type": "string"
+			},
+			"lastModified": {
+				"type": "string"
+			},
+			"prev_max_index": {
+				"type": "string"
+			},
+			"MasterRunID": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"staging_table_name": {
+				"type": "String"
+			},
+			"staging_database_schema": {
+				"type": "String"
+			},
+			"staging_server_path": {
+				"type": "String"
+			},
+			"staging_database_name": {
+				"type": "String"
+			},
+			"staging_obfuscation_database_name": {
+				"type": "String"
+			},
+			"staging_udf_name": {
+				"type": "String"
+			},
+			"staging_obfuscation_database_schema": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}

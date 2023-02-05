@@ -1,0 +1,47 @@
+{
+	"name": "caelum_data_lake_soft_rollback",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "datalake",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"country": {
+				"type": "string"
+			},
+			"zone": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string"
+			},
+			"table": {
+				"type": "string"
+			},
+			"adls_dw_container_name": {
+				"type": "string"
+			},
+			"rollback_dt": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Parquet",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"folderPath": {
+					"value": "@concat('dw_data_store_soft_del/',dataset().rollback_dt,'/',dataset().zone,'/',dataset().country,'/',dataset().source,'/',dataset().table)",
+					"type": "Expression"
+				},
+				"fileSystem": {
+					"value": "@dataset().adls_dw_container_name",
+					"type": "Expression"
+				}
+			},
+			"compressionCodec": "none"
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

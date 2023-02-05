@@ -1,0 +1,73 @@
+{
+	"name": "SqlServerTableTest",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "sql_server",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"database": "master",
+				"server_path": "LWSQLDEV075"
+			}
+		},
+		"annotations": [],
+		"type": "SqlServerTable",
+		"schema": [
+			{
+				"name": "ROW_ID",
+				"type": "bigint",
+				"precision": 19
+			},
+			{
+				"name": "CurrencyCode",
+				"type": "char"
+			},
+			{
+				"name": "BaseCurrency",
+				"type": "tinyint",
+				"precision": 3
+			},
+			{
+				"name": "ROW_KEY",
+				"type": "varchar"
+			},
+			{
+				"name": "ROW_CREATED_BY_ID",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "ROW_CREATED_DATETIME",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			},
+			{
+				"name": "ROW_OPERATION_CODE",
+				"type": "varchar"
+			},
+			{
+				"name": "ROW_UPDATE_MASK",
+				"type": "varchar"
+			},
+			{
+				"name": "SOURCE_CREATED_DATETIME",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			},
+			{
+				"name": "SOURCE_CREATED_SEQUENCE",
+				"type": "varchar"
+			},
+			{
+				"name": "SOURCE_SYSTEM_CODE",
+				"type": "varchar"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "NOVA_ncCurrencyCodes"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

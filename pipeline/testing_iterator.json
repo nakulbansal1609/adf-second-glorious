@@ -1,0 +1,139 @@
+{
+	"name": "testing_iterator",
+	"properties": {
+		"activities": [
+			{
+				"name": "TableIngestion",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetTableList",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetTableList').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "testing_pipeline",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "testing_pipeline",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"run_id": {
+										"value": "@item().run_id",
+										"type": "Expression"
+									},
+									"iterator_run_id": {
+										"value": "@item().iterator_run_id",
+										"type": "Expression"
+									},
+									"table_name": {
+										"value": "@item().table_name",
+										"type": "Expression"
+									},
+									"source": {
+										"value": "@item().source",
+										"type": "Expression"
+									},
+									"filename": {
+										"value": "@item().filename",
+										"type": "Expression"
+									},
+									"day": {
+										"value": "@item().day",
+										"type": "Expression"
+									},
+									"month": {
+										"value": "@item().month",
+										"type": "Expression"
+									},
+									"year": {
+										"value": "@item().year",
+										"type": "Expression"
+									},
+									"aggregateKey": {
+										"value": "@item().aggregateKey",
+										"type": "Expression"
+									},
+									"source_max": {
+										"value": "@item().source_max",
+										"type": "Expression"
+									},
+									"current_max": {
+										"value": "@item().current_max",
+										"type": "Expression"
+									},
+									"system_db_schema": {
+										"value": "@item().system_db_schema",
+										"type": "Expression"
+									},
+									"system_db": "@item().system_db",
+									"system_url": "@item().system_url",
+									"delta_column": "@item().delta_column"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetTableList",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * FROM tst.testing_parameters\nwhere iterator_run_id = '@{pipeline().parameters.iterator_run_id}';",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "testing_parameters"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"iterator_run_id": {
+				"type": "string",
+				"defaultValue": "NULL"
+			}
+		},
+		"folder": {
+			"name": "Testing_Pipelines/testingPipelines"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-10T20:05:42Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

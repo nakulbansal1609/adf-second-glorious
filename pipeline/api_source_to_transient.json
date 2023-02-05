@@ -1,0 +1,511 @@
+{
+	"name": "api_source_to_transient",
+	"properties": {
+		"activities": [
+			{
+				"name": "GetTableMetadata",
+				"description": "This activity will fetch the metadata from the Table in adf-metastore",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetTableMetadata]",
+						"storedProcedureParameters": {
+							"SourceName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Env": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().globalParameters.environment",
+									"type": "Expression"
+								}
+							},
+							"catchup": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.catchup",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_tablelist",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "GetRestApiParams",
+				"description": "The activity is to get the query parameters for the respective REST API object.",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetRestApiParams]",
+						"storedProcedureParameters": {
+							"ObjectName": {
+								"value": {
+									"value": "@activity('GetTableMetadata').output.firstRow.object_name",
+									"type": "Expression"
+								}
+							},
+							"SourceID": {
+								"value": {
+									"value": "@activity('GetTableMetadata').output.firstRow.source_id",
+									"type": "Expression"
+								}
+							},
+							"CountryID": {
+								"value": {
+									"value": "@activity('GetTableMetadata').output.firstRow.country_id",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "SourceToTransient",
+				"description": "The activity will invoke the REST API to fetch JSON body from source system. The activity is also capable of obfuscation on fly before storing the data in JSONL format. The final module in this activity will convert the JSONL file into Parquet File before storing into Transient Zone.",
+				"type": "DatabricksNotebook",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetRestApiParams",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetNestedColumns",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebookPath": {
+						"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'restapi-client-app/main-app')\n",
+						"type": "Expression"
+					},
+					"baseParameters": {
+						"system_url": {
+							"value": "@activity('GetTableMetadata').output.firstRow.system_url",
+							"type": "Expression"
+						},
+						"url_pathname": {
+							"value": "@activity('GetTableMetadata').output.firstRow.url_pathname",
+							"type": "Expression"
+						},
+						"filename_timestamp": {
+							"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+							"type": "Expression"
+						},
+						"param_string": {
+							"value": "@join(activity('GetRestApiParams').output.value,'|')",
+							"type": "Expression"
+						},
+						"object_name": {
+							"value": "@activity('GetTableMetadata').output.firstRow.object_name",
+							"type": "Expression"
+						},
+						"zone_name": "transient",
+						"periodic_call_flg": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.periodic_call_flg)",
+							"type": "Expression"
+						},
+						"source_name": {
+							"value": "@activity('GetTableMetadata').output.firstRow.source_name",
+							"type": "Expression"
+						},
+						"country_name": {
+							"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+							"type": "Expression"
+						},
+						"max_index": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.max_index)",
+							"type": "Expression"
+						},
+						"delta_column": {
+							"value": "@activity('GetTableMetadata').output.firstRow.delta_column",
+							"type": "Expression"
+						},
+						"index_column": {
+							"value": "@activity('GetTableMetadata').output.firstRow.index_column",
+							"type": "Expression"
+						},
+						"orig_delta_column": {
+							"value": "@activity('GetTableMetadata').output.firstRow.orig_delta_column",
+							"type": "Expression"
+						},
+						"max_timestamp": {
+							"value": "@activity('GetTableMetadata').output.firstRow.max_timestamp",
+							"type": "Expression"
+						},
+						"nested_columns": {
+							"value": "@activity('GetNestedColumns').output.firstRow.nested_columns",
+							"type": "Expression"
+						},
+						"incremental_mock_flg": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.incremental_mock_flg)",
+							"type": "Expression"
+						},
+						"start_period": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.start_period)",
+							"type": "Expression"
+						},
+						"end_period": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.end_period)",
+							"type": "Expression"
+						},
+						"wild_card_read_flg": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.wild_card_read_flg)",
+							"type": "Expression"
+						},
+						"drop_empty_columns": {
+							"value": "@string(activity('GetTableMetadata').output.firstRow.drop_empty_columns)",
+							"type": "Expression"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "databricks_cs",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "DateConditionalSet",
+				"description": "The activity will check if the pipeline has already have timestamp initialised. if not it will read the system utc time",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.date)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetCurrentTimestampFromParam",
+							"description": "Fech the timestamp from the current parameter date value",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@pipeline().parameters.date",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentTimestamp",
+							"description": "Fetch the timestamp from the current system utc time",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@utcnow()",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "MasterRunIDSet",
+				"description": "To Fetch the Master RunID",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.MasterRunID)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().parameters.MasterRunID",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().RunId",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "UpdateMetadata",
+				"description": "To update the metadaa table with Delta column and index values",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SourceToTransient",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "UPDATE adf_metastore.dbo.table_list SET max_timestamp='@{activity('SourceToTransient').output.runOutput.max_timestamp}', max_index=@{activity('SourceToTransient').output.runOutput.max_index}\nWHERE table_name='@{pipeline().parameters.table_name}';\nSELECT 1\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "UpdatePipelineLogs",
+				"description": "This activity is to insert the pipeline run logs in the pipeline_logs table",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SetAhirCount",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'SourceToTransient' StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'transient.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('SourceToTransient').output.runOutput.record_count}' as rowsCopied,\n'@{activity('SourceToTransient').output.runOutput.record_count}' as RowsRead,\n' ' as No_ParallelCopies,\n' ' as copyDuration_in_secs,\n'@{activity('SourceToTransient').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'RESTAPI' as Source_Type,\n'ADLS' as Sink_Type,\n'Succeeded' as Execution_Status,\n' ' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n' ' as CopyActivity_queuingDuration_in_secs,\n' ' as CopyActivity_timeToFirstByte_in_secs,\n' ' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToTransient').output.dataWritten),1048576)}' as data_volume_mb\n--,'@{activity('SourceToTransient').output.runPageUrl}' as output_url\n;\nSELECT * FROM [dbo].[pipeline_log]\nWHERE pipeline_name='@{pipeline().RunId}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetNestedColumns",
+				"description": "This activity fetches the nested array columns if they are present for any parent table.",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetNestedColumns]",
+						"storedProcedureParameters": {
+							"source_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"table_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "SetAhirCount",
+				"description": "variable needed to see what ahir to be chosen for the dataflow",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SourceToTransient",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "transient_record_count",
+					"value": {
+						"value": "@activity('SourceToTransient').output.runOutput.record_count",
+						"type": "Expression"
+					}
+				}
+			}
+		],
+		"parameters": {
+			"source": {
+				"type": "string",
+				"defaultValue": "UBW"
+			},
+			"table_name": {
+				"type": "string",
+				"defaultValue": "accounts"
+			},
+			"date": {
+				"type": "string"
+			},
+			"MasterRunID": {
+				"type": "string"
+			},
+			"catchup": {
+				"type": "string",
+				"defaultValue": "false"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"MasterRunID": {
+				"type": "String"
+			},
+			"transient_record_count": {
+				"type": "String",
+				"defaultValue": "0"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/1 source_to_transient"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-10T20:05:33Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

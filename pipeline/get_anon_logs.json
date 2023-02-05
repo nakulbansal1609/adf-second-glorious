@@ -1,0 +1,213 @@
+{
+	"name": "get_anon_logs",
+	"properties": {
+		"activities": [
+			{
+				"name": "AnonLogIngest",
+				"type": "ExecuteDataFlow",
+				"dependsOn": [
+					{
+						"activity": "AnonLogIngestStaging",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "1.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataflow": {
+						"referenceName": "data_anon_dataflow",
+						"type": "DataFlowReference",
+						"datasetParameters": {
+							"AnonTableSource": {
+								"TABLE_NAME": "vAvpersonifierdeAkterOchGld",
+								"zone": "staging",
+								"shield_db_name": "shield_db"
+							},
+							"AnonTableTarget": {
+								"TABLE_NAME": "AnonLog",
+								"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+							}
+						}
+					},
+					"staging": {
+						"linkedService": {
+							"referenceName": "datalake",
+							"type": "LinkedServiceReference"
+						},
+						"folderPath": {
+							"value": "@concat(pipeline().globalParameters.adls_dw_container_name,'/staging')",
+							"type": "Expression"
+						}
+					},
+					"compute": {
+						"coreCount": 8,
+						"computeType": "General"
+					},
+					"traceLevel": "Fine"
+				}
+			},
+			{
+				"name": "DataAnonimization",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "AnonLogIngest",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "1.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[NovaAnonimization]",
+						"storedProcedureParameters": {
+							"delete_type": {
+								"type": "String",
+								"value": "soft_delete"
+							},
+							"execution_type": {
+								"type": "String",
+								"value": "exec"
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "DataAnonimizationTest",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "DataAnonimization",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[NovaAnonimization]",
+						"storedProcedureParameters": {
+							"delete_type": {
+								"type": "String",
+								"value": "soft_delete"
+							},
+							"execution_type": {
+								"type": "String",
+								"value": "test"
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "AnonLogIngestStaging",
+				"description": "Copy the data from nova cdc to shield_db staging",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "SqlDWSink",
+						"allowPolyBase": true,
+						"polyBaseSettings": {
+							"rejectValue": 0,
+							"rejectType": "value",
+							"useTypeDefault": true
+						}
+					},
+					"enableStaging": true,
+					"stagingSettings": {
+						"linkedServiceName": {
+							"referenceName": "datalake",
+							"type": "LinkedServiceReference"
+						},
+						"path": "fs01-dlalwcaelumdevdw01/staging"
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "parameterized_source",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema": "cdc",
+							"table_name": "vAvpersonifierdeAkterOchGld",
+							"server_path": "LWSQLDEV075.intad1.com",
+							"database_name": "Obfuscated_ODS"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Shield_staging",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "vAvpersonifierdeAkterOchGld",
+							"zone": "staging",
+							"shield_db_name": "shield_db"
+						}
+					}
+				]
+			}
+		],
+		"folder": {
+			"name": "Caelum_Pipelines/data_delink_deletion"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-10T20:05:39Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

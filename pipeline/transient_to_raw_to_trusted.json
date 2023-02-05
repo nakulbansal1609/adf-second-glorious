@@ -1,0 +1,2178 @@
+{
+	"name": "transient_to_raw_to_trusted",
+	"properties": {
+		"activities": [
+			{
+				"name": "GetPIITreatments",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetPIITreatments]",
+						"storedProcedureParameters": {
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetPIIDQchecks",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "GetBypassPIIDQchecks",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetDQChecks]",
+						"storedProcedureParameters": {
+							"PIITreatment": {
+								"type": "String",
+								"value": "TRUE"
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Bypass": {
+								"type": "String",
+								"value": null
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "DateConditionalSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.date)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetCurrentTimestampFromParam",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@pipeline().parameters.date",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentTimestamp",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@utcnow()",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetYear",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "year",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'yyyy')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetMonth",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "month",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'MM')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetDay",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "day",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'dd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetTimestamp",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "timestamp",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetNonPIIDQchecks",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "GetBypassNonPIIDQchecks",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetDQChecks]",
+						"storedProcedureParameters": {
+							"PIITreatment": {
+								"type": "String",
+								"value": "FALSE"
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Bypass": {
+								"type": "String",
+								"value": null
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetTableMetadata",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetTableMetadata]",
+						"storedProcedureParameters": {
+							"SourceName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Env": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().globalParameters.environment",
+									"type": "Expression"
+								}
+							},
+							"catchup": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.catchup",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_tablelist",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "MasterRunIDSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.MasterRunID)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().parameters.MasterRunID",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunID",
+								"value": {
+									"value": "@pipeline().RunId",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetSourceCnt",
+				"description": "Get the number of rows needed to select the ahir ",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "MasterRunIDSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetNonPIIDQchecks",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetPIIDQchecks",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetPIITreatments",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetDay",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetMonth",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetYear",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetDQFailReason",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetPIIBypassList",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetNonPIIBypassList",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "select rows_read from  [dbo].[pipeline_log] \nwhere run_id = '@{pipeline().parameters.MasterRunID}' \nand step_name Like 'SourceCount%'\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "SwitchAhir",
+				"description": "This activity will switch between different ahirs based on the number of rows ingested",
+				"type": "Switch",
+				"dependsOn": [
+					{
+						"activity": "GetSourceCnt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"on": {
+						"value": "@if(lessOrEquals(int(activity('GetSourceCnt').output.firstRow.rows_read), 4000000), 'ahir1', if(greaterOrEquals(int(activity('GetSourceCnt').output.firstRow.rows_read), 40000000), 'ahir3', 'ahir2'))",
+						"type": "Expression"
+					},
+					"cases": [
+						{
+							"value": "ahir1",
+							"activities": [
+								{
+									"name": "TransientToRawToShield_1",
+									"description": "This is the dataflow activity to move data form transient source to raw/trusted/shield",
+									"type": "ExecuteDataFlow",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "1.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataflow": {
+											"referenceName": "data_movement_framework_v2",
+											"type": "DataFlowReference",
+											"parameters": {
+												"fulltoken_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.fulltoken}'",
+													"type": "Expression"
+												},
+												"partialtoken_email_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_email}'",
+													"type": "Expression"
+												},
+												"partialtoken_iban_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_iban}'",
+													"type": "Expression"
+												},
+												"partialtoken_date_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_date}'",
+													"type": "Expression"
+												},
+												"pk_list": {
+													"value": "'@{concat('\"',activity('GetTableMetadata').output.firstRow.index_column,'\"')}'",
+													"type": "Expression"
+												},
+												"max_row_id": {
+													"value": "@activity('GetTableMetadata').output.firstRow.prev_max_index",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "'@{pipeline().parameters.table_name}'",
+													"type": "Expression"
+												},
+												"pii_dq_checks": {
+													"value": "@activity('GetPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"non_pii_dq_checks": {
+													"value": "@activity('GetNonPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"timestamp": {
+													"value": "'@{variables('timestamp')}'",
+													"type": "Expression"
+												},
+												"fulltoken_unique_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.fulltoken_unique}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_unique_list1": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.conditional_fulltoken_unique1}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_condition1": {
+													"value": "@activity('GetPIITreatments').output.firstRow.condition1",
+													"type": "Expression"
+												},
+												"support_col_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.support_col}'",
+													"type": "Expression"
+												},
+												"pk_join_l": "toString(byName(concat(replace($pk_list,'\"',''),'_ORIG')))",
+												"pk_join_r": "toString(byName(concat(replace($pk_list,'\"',''),'_TOKEN')))",
+												"conditional_fulltoken_unique_list2": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.conditional_fulltoken_unique2}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_condition2": {
+													"value": "@activity('GetPIITreatments').output.firstRow.condition2",
+													"type": "Expression"
+												},
+												"dq_fail_reason": {
+													"value": "@activity('GetDQFailReason').output.firstRow.dq_reason",
+													"type": "Expression"
+												},
+												"pipeline_run_id": {
+													"value": "'@{pipeline().parameters.MasterRunID}'",
+													"type": "Expression"
+												},
+												"bypass_pii_dq_checks": {
+													"value": "@activity('GetBypassPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"bypass_non_pii_dq_checks": {
+													"value": "@activity('GetBypassNonPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"pii_bypass_list": {
+													"value": "'@{activity('GetPIIBypassList').output.firstRow.bypass_list}'",
+													"type": "Expression"
+												},
+												"non_pii_bypass_list": {
+													"value": "'@{activity('GetNonPIIBypassList').output.firstRow.bypass_list}'",
+													"type": "Expression"
+												}
+											},
+											"datasetParameters": {
+												"DataSource": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.transient_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@formatDateTime(variables('date'),'yyyy')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@formatDateTime(variables('date'),'MM')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												},
+												"TransientBadDataShield": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"zone": "@pipeline().globalParameters.transient_zone_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"RawZoneSink": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.raw_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@variables('year')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@variables('month')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												},
+												"ShieldSink": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"RawBadDataShield": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"zone": "@pipeline().globalParameters.raw_zone_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"TrustedZoneSink": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.trusted_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@variables('year')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@variables('month')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												}
+											}
+										},
+										"staging": {
+											"linkedService": {
+												"referenceName": "datalake",
+												"type": "LinkedServiceReference"
+											},
+											"folderPath": {
+												"value": "@concat(pipeline().globalParameters.adls_dw_container_name,'/staging')",
+												"type": "Expression"
+											}
+										},
+										"integrationRuntime": {
+											"referenceName": "ahirq-lw-caelum-prod-dw-01",
+											"type": "IntegrationRuntimeReference"
+										},
+										"traceLevel": "Fine"
+									}
+								},
+								{
+									"name": "Execute Logging1",
+									"type": "ExecutePipeline",
+									"dependsOn": [
+										{
+											"activity": "TransientToRawToShield_1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "CondLogging_v2",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"DataFactory_Name": {
+												"value": "@pipeline().DataFactory",
+												"type": "Expression"
+											},
+											"Pipeline_Name": {
+												"value": "@pipeline().Pipeline",
+												"type": "Expression"
+											},
+											"RunId": {
+												"value": "@variables('MasterRunID')",
+												"type": "Expression"
+											},
+											"TriggerType": {
+												"value": "@pipeline().TriggerType",
+												"type": "Expression"
+											},
+											"TriggerId": {
+												"value": "@pipeline().TriggerId",
+												"type": "Expression"
+											},
+											"TriggerName": {
+												"value": "@pipeline().TriggerName",
+												"type": "Expression"
+											},
+											"TriggerTime": {
+												"value": "@pipeline().TriggerTime",
+												"type": "Expression"
+											},
+											"dataflow_metrics": {
+												"value": "@activity('TransientToRawToShield_1').output",
+												"type": "Expression"
+											},
+											"table_name": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"date": {
+												"value": "@formatDateTime(string(variables('date')),'yyyy-MM-dd HH:MM:ss.fff')",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						},
+						{
+							"value": "ahir2",
+							"activities": [
+								{
+									"name": "TransientToRawToShield_2",
+									"description": "This is the dataflow activity to move data form transient source to raw/trusted/shield",
+									"type": "ExecuteDataFlow",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "1.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataflow": {
+											"referenceName": "data_movement_framework_v2",
+											"type": "DataFlowReference",
+											"parameters": {
+												"fulltoken_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.fulltoken}'",
+													"type": "Expression"
+												},
+												"partialtoken_email_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_email}'",
+													"type": "Expression"
+												},
+												"partialtoken_iban_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_iban}'",
+													"type": "Expression"
+												},
+												"partialtoken_date_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_date}'",
+													"type": "Expression"
+												},
+												"pk_list": {
+													"value": "'@{concat('\"',activity('GetTableMetadata').output.firstRow.index_column,'\"')}'",
+													"type": "Expression"
+												},
+												"max_row_id": {
+													"value": "@activity('GetTableMetadata').output.firstRow.prev_max_index",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "'@{pipeline().parameters.table_name}'",
+													"type": "Expression"
+												},
+												"pii_dq_checks": {
+													"value": "@activity('GetPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"non_pii_dq_checks": {
+													"value": "@activity('GetNonPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"timestamp": {
+													"value": "'@{variables('timestamp')}'",
+													"type": "Expression"
+												},
+												"fulltoken_unique_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.fulltoken_unique}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_unique_list1": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.conditional_fulltoken_unique1}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_condition1": {
+													"value": "@activity('GetPIITreatments').output.firstRow.condition1",
+													"type": "Expression"
+												},
+												"support_col_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.support_col}'",
+													"type": "Expression"
+												},
+												"pk_join_l": "toString(byName(concat(replace($pk_list,'\"',''),'_ORIG')))",
+												"pk_join_r": "toString(byName(concat(replace($pk_list,'\"',''),'_TOKEN')))",
+												"conditional_fulltoken_unique_list2": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.conditional_fulltoken_unique2}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_condition2": {
+													"value": "@activity('GetPIITreatments').output.firstRow.condition2",
+													"type": "Expression"
+												},
+												"dq_fail_reason": {
+													"value": "@activity('GetDQFailReason').output.firstRow.dq_reason",
+													"type": "Expression"
+												},
+												"pipeline_run_id": {
+													"value": "'@{pipeline().parameters.MasterRunID}'",
+													"type": "Expression"
+												},
+												"bypass_pii_dq_checks": {
+													"value": "@activity('GetBypassPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"bypass_non_pii_dq_checks": {
+													"value": "@activity('GetBypassNonPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"pii_bypass_list": {
+													"value": "'@{activity('GetPIIBypassList').output.firstRow.bypass_list}'",
+													"type": "Expression"
+												},
+												"non_pii_bypass_list": {
+													"value": "'@{activity('GetNonPIIBypassList').output.firstRow.bypass_list}'",
+													"type": "Expression"
+												}
+											},
+											"datasetParameters": {
+												"DataSource": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.transient_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@formatDateTime(variables('date'),'yyyy')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@formatDateTime(variables('date'),'MM')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												},
+												"TransientBadDataShield": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"zone": "@pipeline().globalParameters.transient_zone_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"RawZoneSink": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.raw_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@variables('year')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@variables('month')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												},
+												"ShieldSink": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"RawBadDataShield": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"zone": "@pipeline().globalParameters.raw_zone_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"TrustedZoneSink": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.trusted_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@variables('year')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@variables('month')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												}
+											}
+										},
+										"staging": {
+											"linkedService": {
+												"referenceName": "datalake",
+												"type": "LinkedServiceReference"
+											},
+											"folderPath": {
+												"value": "@concat(pipeline().globalParameters.adls_dw_container_name,'/staging')",
+												"type": "Expression"
+											}
+										},
+										"integrationRuntime": {
+											"referenceName": "ahirq-lw-caelum-prod-dw-02",
+											"type": "IntegrationRuntimeReference"
+										},
+										"traceLevel": "Fine"
+									}
+								},
+								{
+									"name": "Execute Logging2",
+									"type": "ExecutePipeline",
+									"dependsOn": [
+										{
+											"activity": "TransientToRawToShield_2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "CondLogging_v2",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"DataFactory_Name": {
+												"value": "@pipeline().DataFactory",
+												"type": "Expression"
+											},
+											"Pipeline_Name": {
+												"value": "@pipeline().Pipeline",
+												"type": "Expression"
+											},
+											"RunId": {
+												"value": "@variables('MasterRunID')",
+												"type": "Expression"
+											},
+											"TriggerType": {
+												"value": "@pipeline().TriggerType",
+												"type": "Expression"
+											},
+											"TriggerId": {
+												"value": "@pipeline().TriggerId",
+												"type": "Expression"
+											},
+											"TriggerName": {
+												"value": "@pipeline().TriggerName",
+												"type": "Expression"
+											},
+											"TriggerTime": {
+												"value": "@pipeline().TriggerTime",
+												"type": "Expression"
+											},
+											"dataflow_metrics": {
+												"value": "@activity('TransientToRawToShield_2').output",
+												"type": "Expression"
+											},
+											"table_name": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"date": {
+												"value": "@formatDateTime(string(variables('date')),'yyyy-MM-dd HH:MM:ss.fff')",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						},
+						{
+							"value": "ahir3",
+							"activities": [
+								{
+									"name": "TransientToRawToShield_3",
+									"description": "This is the dataflow activity to move data form transient source to raw/trusted/shield",
+									"type": "ExecuteDataFlow",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "1.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"dataflow": {
+											"referenceName": "data_movement_framework_v2",
+											"type": "DataFlowReference",
+											"parameters": {
+												"fulltoken_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.fulltoken}'",
+													"type": "Expression"
+												},
+												"partialtoken_email_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_email}'",
+													"type": "Expression"
+												},
+												"partialtoken_iban_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_iban}'",
+													"type": "Expression"
+												},
+												"partialtoken_date_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.partialtoken_date}'",
+													"type": "Expression"
+												},
+												"pk_list": {
+													"value": "'@{concat('\"',activity('GetTableMetadata').output.firstRow.index_column,'\"')}'",
+													"type": "Expression"
+												},
+												"max_row_id": {
+													"value": "@activity('GetTableMetadata').output.firstRow.prev_max_index",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "'@{pipeline().parameters.table_name}'",
+													"type": "Expression"
+												},
+												"pii_dq_checks": {
+													"value": "@activity('GetPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"non_pii_dq_checks": {
+													"value": "@activity('GetNonPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"timestamp": {
+													"value": "'@{variables('timestamp')}'",
+													"type": "Expression"
+												},
+												"fulltoken_unique_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.fulltoken_unique}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_unique_list1": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.conditional_fulltoken_unique1}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_condition1": {
+													"value": "@activity('GetPIITreatments').output.firstRow.condition1",
+													"type": "Expression"
+												},
+												"support_col_list": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.support_col}'",
+													"type": "Expression"
+												},
+												"pk_join_l": "toString(byName(concat(replace($pk_list,'\"',''),'_ORIG')))",
+												"pk_join_r": "toString(byName(concat(replace($pk_list,'\"',''),'_TOKEN')))",
+												"conditional_fulltoken_unique_list2": {
+													"value": "'@{activity('GetPIITreatments').output.firstRow.conditional_fulltoken_unique2}'",
+													"type": "Expression"
+												},
+												"conditional_fulltoken_condition2": {
+													"value": "@activity('GetPIITreatments').output.firstRow.condition2",
+													"type": "Expression"
+												},
+												"dq_fail_reason": {
+													"value": "@activity('GetDQFailReason').output.firstRow.dq_reason",
+													"type": "Expression"
+												},
+												"pipeline_run_id": {
+													"value": "'@{pipeline().parameters.MasterRunID}'",
+													"type": "Expression"
+												},
+												"bypass_pii_dq_checks": {
+													"value": "@activity('GetBypassPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"bypass_non_pii_dq_checks": {
+													"value": "@activity('GetBypassNonPIIDQchecks').output.firstRow.dq_checks",
+													"type": "Expression"
+												},
+												"pii_bypass_list": {
+													"value": "'@{activity('GetPIIBypassList').output.firstRow.bypass_list}'",
+													"type": "Expression"
+												},
+												"non_pii_bypass_list": {
+													"value": "'@{activity('GetNonPIIBypassList').output.firstRow.bypass_list}'",
+													"type": "Expression"
+												}
+											},
+											"datasetParameters": {
+												"DataSource": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.transient_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@formatDateTime(variables('date'),'yyyy')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@formatDateTime(variables('date'),'MM')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												},
+												"TransientBadDataShield": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"zone": "@pipeline().globalParameters.transient_zone_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"RawZoneSink": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.raw_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@variables('year')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@variables('month')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												},
+												"ShieldSink": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"RawBadDataShield": {
+													"TABLE_NAME": "@pipeline().parameters.table_name",
+													"zone": "@pipeline().globalParameters.raw_zone_name",
+													"shield_db_name": "@pipeline().globalParameters.shield_db_name"
+												},
+												"TrustedZoneSink": {
+													"country": {
+														"value": "@activity('GetTableMetadata').output.firstRow.country_name",
+														"type": "Expression"
+													},
+													"zone": {
+														"value": "@pipeline().globalParameters.trusted_zone_name",
+														"type": "Expression"
+													},
+													"source": {
+														"value": "@pipeline().parameters.source",
+														"type": "Expression"
+													},
+													"year": {
+														"value": "@variables('year')",
+														"type": "Expression"
+													},
+													"month": {
+														"value": "@variables('month')",
+														"type": "Expression"
+													},
+													"day": {
+														"value": "@variables('day')",
+														"type": "Expression"
+													},
+													"table": {
+														"value": "@pipeline().parameters.table_name",
+														"type": "Expression"
+													},
+													"file_timestamp": {
+														"value": "@variables('timestamp')",
+														"type": "Expression"
+													},
+													"adls_dw_container_name": {
+														"value": "@pipeline().globalParameters.adls_dw_container_name",
+														"type": "Expression"
+													}
+												}
+											}
+										},
+										"staging": {
+											"linkedService": {
+												"referenceName": "datalake",
+												"type": "LinkedServiceReference"
+											},
+											"folderPath": {
+												"value": "@concat(pipeline().globalParameters.adls_dw_container_name,'/staging')",
+												"type": "Expression"
+											}
+										},
+										"integrationRuntime": {
+											"referenceName": "ahirq-lw-caelum-prod-dw-03",
+											"type": "IntegrationRuntimeReference"
+										},
+										"traceLevel": "Fine"
+									}
+								},
+								{
+									"name": "Execute Logging3",
+									"type": "ExecutePipeline",
+									"dependsOn": [
+										{
+											"activity": "TransientToRawToShield_3",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "CondLogging_v2",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"DataFactory_Name": {
+												"value": "@pipeline().DataFactory",
+												"type": "Expression"
+											},
+											"Pipeline_Name": {
+												"value": "@pipeline().Pipeline",
+												"type": "Expression"
+											},
+											"RunId": {
+												"value": "@variables('MasterRunID')",
+												"type": "Expression"
+											},
+											"TriggerType": {
+												"value": "@pipeline().TriggerType",
+												"type": "Expression"
+											},
+											"TriggerId": {
+												"value": "@pipeline().TriggerId",
+												"type": "Expression"
+											},
+											"TriggerName": {
+												"value": "@pipeline().TriggerName",
+												"type": "Expression"
+											},
+											"TriggerTime": {
+												"value": "@pipeline().TriggerTime",
+												"type": "Expression"
+											},
+											"dataflow_metrics": {
+												"value": "@activity('TransientToRawToShield_3').output",
+												"type": "Expression"
+											},
+											"table_name": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											},
+											"date": {
+												"value": "@formatDateTime(string(variables('date')),'yyyy-MM-dd HH:MM:ss.fff')",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					],
+					"defaultActivities": [
+						{
+							"name": "Wait1",
+							"type": "Wait",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"waitTimeInSeconds": 1
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetDQFailReason",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetDQFailReason]",
+						"storedProcedureParameters": {
+							"PIITreatment": {
+								"type": "String",
+								"value": "FALSE"
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "DropShieldTableIfEmpty",
+				"description": "Check if the total number of rows from shield is equal to 0. In the case the shield table is empty, a stored procedure is executed to drop the empty shield table.",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetShieldCount",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(int(activity('GetShieldCount').output.firstRow.shield_count), 0)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "WaitShield",
+							"type": "Wait",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"waitTimeInSeconds": 1
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "DropEmptyShield",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[shield_db].[DropTableIfExists]",
+								"storedProcedureParameters": {
+									"Path": {
+										"value": {
+											"value": "@concat('[', pipeline().globalParameters.shield_db_name, '].[', pipeline().globalParameters.shield_zone_name, '_db].[', pipeline().parameters.table_name, '_sld]')",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.dw_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetShieldCount",
+				"description": "Get the total number of rows from the shield.",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SwitchAhir",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT COUNT(*) AS shield_count FROM @{concat('[', pipeline().globalParameters.shield_db_name, '].[', pipeline().globalParameters.shield_zone_name, '_db].[', pipeline().parameters.table_name, '_sld]')}",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "DropRawBadDataIfEmpty",
+				"description": "Check if the total number of rows from Raw bad Data is equal to 0. In the case the raw bad_data table is empty, a stored procedure is executed to drop the empty raw bad_data table. Otherwise a log is with all the rows rejected is created ",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetRawBadDataCount",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(int(activity('GetRawBadDataCount').output.firstRow.raw_count), 0)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "LogRawBadData",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[logDQFailRows]",
+								"storedProcedureParameters": {
+									"dwDbName": {
+										"value": {
+											"value": "@pipeline().globalParameters.dw_db_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"loadType": {
+										"value": {
+											"value": "@{activity('GetTableMetadata').output.firstRow.load_type}",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"pipelineId": {
+										"value": {
+											"value": "@pipeline().parameters.MasterRunID",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"tableName": {
+										"value": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"zoneName": {
+										"value": {
+											"value": "@pipeline().globalParameters.raw_zone_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.dw_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "DropEmptyRawBadData",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[shield_db].[DropTableIfExists]",
+								"storedProcedureParameters": {
+									"Path": {
+										"value": {
+											"value": "@concat('[', pipeline().globalParameters.dw_db_name, '].[bad_data].[', toUpper(pipeline().globalParameters.raw_zone_name),'_', pipeline().parameters.table_name, '_bad]')",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.dw_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetRawBadDataCount",
+				"description": "Get the total numbers of rows from bad_data, from Raw Zone",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SwitchAhir",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT COUNT(*) AS raw_count FROM @{concat('[', pipeline().globalParameters.dw_db_name, '].[bad_data].[', toUpper(pipeline().globalParameters.raw_zone_name),'_',pipeline().parameters.table_name, '_bad]')}",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield_bad_data",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"zone": {
+								"value": "@pipeline().globalParameters.raw_zone_name",
+								"type": "Expression"
+							},
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "DropTransientBadDataIfEmpty",
+				"description": "Check if the total number of rows from Transient Bad Data is equal to 0. In the case the transient bad_data table is empty, a stored procedure is executed to drop the empty transient bad_data table. Otherwise a log is with all the rows rejected is created ",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTransientBadDataCount",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(int(activity('GetTransientBadDataCount').output.firstRow.transient_count), 0)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "LogTransientBadData",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[logDQFailRows]",
+								"storedProcedureParameters": {
+									"dwDbName": {
+										"value": {
+											"value": "@pipeline().globalParameters.dw_db_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"loadType": {
+										"value": {
+											"value": "@{activity('GetTableMetadata').output.firstRow.load_type}",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"pipelineId": {
+										"value": {
+											"value": "@pipeline().parameters.MasterRunID",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"tableName": {
+										"value": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"zoneName": {
+										"value": {
+											"value": "@pipeline().globalParameters.transient_zone_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.dw_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "DropEmptyTransientBadData",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[shield_db].[DropTableIfExists]",
+								"storedProcedureParameters": {
+									"Path": {
+										"value": {
+											"value": "@concat('[', pipeline().globalParameters.dw_db_name, '].[bad_data].[', toUpper(pipeline().globalParameters.transient_zone_name),'_', pipeline().parameters.table_name, '_bad]')",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.dw_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetTransientBadDataCount",
+				"description": "Get the total number of bad_data rows from Transient Zone",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SwitchAhir",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT COUNT(*) AS transient_count FROM @{concat('[', pipeline().globalParameters.dw_db_name, '].[bad_data].[', toUpper(pipeline().globalParameters.transient_zone_name),'_', pipeline().parameters.table_name, '_bad]')}",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield_bad_data",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"zone": {
+								"value": "@pipeline().globalParameters.transient_zone_name",
+								"type": "Expression"
+							},
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "GetBypassPIIDQchecks",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetDQChecks]",
+						"storedProcedureParameters": {
+							"PIITreatment": {
+								"type": "String",
+								"value": "TRUE"
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Bypass": {
+								"value": "TRUE"
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetBypassNonPIIDQchecks",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetDQChecks]",
+						"storedProcedureParameters": {
+							"PIITreatment": {
+								"type": "String",
+								"value": "FALSE"
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							},
+							"Bypass": {
+								"value": "TRUE"
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetPIIBypassList",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT COALESCE(STRING_AGG(\n                                 CONCAT('\"', column_name, '\"')\n                               , ','), '') bypass_list\n  FROM [dbo].[dq_checks]\n  WHERE table_name='@{pipeline().parameters.table_name}'\n  AND bypass_dq=1\n  AND concat(table_name, column_name)  IN\n                (select concat(table_name, column_name)\n                    FROM [dbo].[pii_treatment])\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetNonPIIBypassList",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT COALESCE(STRING_AGG(\n                                 CONCAT('\"', column_name, '\"')\n                               , ','), '') bypass_list\n  FROM [dbo].[dq_checks]\n  WHERE table_name='@{pipeline().parameters.table_name}'\n  AND bypass_dq=1\n  AND concat(table_name, column_name)  NOT IN\n                (select concat(table_name, column_name)\n                    FROM [dbo].[pii_treatment])\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			}
+		],
+		"parameters": {
+			"date": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string",
+				"defaultValue": "NOVA"
+			},
+			"table_name": {
+				"type": "string",
+				"defaultValue": "NOVA_niAktGld"
+			},
+			"MasterRunID": {
+				"type": "string"
+			},
+			"catchup": {
+				"type": "string",
+				"defaultValue": "false"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"year": {
+				"type": "String"
+			},
+			"month": {
+				"type": "String"
+			},
+			"day": {
+				"type": "String"
+			},
+			"timestamp": {
+				"type": "String"
+			},
+			"MasterRunID": {
+				"type": "String"
+			},
+			"transient_bad_data_cnt": {
+				"type": "String",
+				"defaultValue": "0"
+			},
+			"raw_bad_data_cnt": {
+				"type": "String",
+				"defaultValue": "0"
+			},
+			"dataflow_metrics": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/2 transient_to_raw_to_trusted"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-15T09:35:53Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

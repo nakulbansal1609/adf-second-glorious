@@ -1,0 +1,138 @@
+{
+	"name": "loop_big_tables",
+	"properties": {
+		"activities": [
+			{
+				"name": "get_filters",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * from dbo.sat_filters\norder by interval_dt",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "sat_filters",
+							"schema_name": "dbo"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopSats",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "get_filters",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('get_filters').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "load_sat",
+							"type": "ExecutePipeline",
+							"dependsOn": [
+								{
+									"activity": "populate_staging_table",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "raw_dv_sats_big",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"MasterRunID": {
+										"value": "@pipeline().RunId",
+										"type": "Expression"
+									},
+									"load_synapse": 0
+								}
+							}
+						},
+						{
+							"name": "populate_staging_table",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlDWSource",
+									"sqlReaderQuery": {
+										"value": "drop table staging.@{pipeline().parameters.table_name};\nselect * into staging.@{pipeline().parameters.table_name} from int_sweden.@{pipeline().parameters.table_name}\nwhere ROW_CREATED_DATETIME between @{item().interval_dt};\nselect 1\n",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Shield",
+									"type": "DatasetReference",
+									"parameters": {
+										"TABLE_NAME": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"shield_db_name": {
+											"value": "@pipeline().globalParameters.shield_db_name",
+											"type": "Expression"
+										}
+									}
+								},
+								"firstRowOnly": false
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string",
+				"defaultValue": "NOVA_niAkt"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/raw vault/big_tbl"
+		},
+		"annotations": []
+	}
+}

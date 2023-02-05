@@ -1,0 +1,157 @@
+{
+	"name": "mart_etl",
+	"properties": {
+		"activities": [
+			{
+				"name": "Copy mart_lookup data to DW",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "SqlDWSink",
+						"preCopyScript": "BEGIN TRY \nDELETE FROM etl.mart_lookup\nEND TRY\nBEGIN CATCH\nPRINT 'Failed'\nEND CATCH",
+						"tableOption": "autoCreate",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "mart_lookup",
+							"schema_name": "dv"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "data_vault_db",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "mart_lookup",
+							"SCHEMA_NAME": "etl",
+							"dw_db_name": {
+								"value": "@pipeline().globalParameters.dw_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "GetDimsFacts",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Copy mart_lookup data to DW",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "select distinct table_name from dv.mart_target_tables where active_flg = 1 and table_name like 'FCT_%'",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetDimsFacts",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetDimsFacts').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "TableLoadExecution",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "table_load",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"table_name": {
+										"value": "@item().table_name",
+										"type": "Expression"
+									},
+									"MasterRunID": {
+										"value": "@pipeline().RunId",
+										"type": "Expression"
+									},
+									"schema_name": "mart"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"variables": {
+			"MasterRunID": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/information_mart"
+		},
+		"annotations": []
+	}
+}

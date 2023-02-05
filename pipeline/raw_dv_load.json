@@ -1,0 +1,100 @@
+{
+	"name": "raw_dv_load",
+	"properties": {
+		"activities": [
+			{
+				"name": "HubLoad",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "raw_dv_hubs",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"MasterRunID": {
+							"value": "@pipeline().RunId",
+							"type": "Expression"
+						},
+						"load_synapse": {
+							"value": "@pipeline().parameters.load_synapse",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "LinkLoad",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "HubLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "raw_dv_links",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"MasterRunID": {
+							"value": "@pipeline().RunId",
+							"type": "Expression"
+						},
+						"load_synapse": {
+							"value": "@pipeline().parameters.load_synapse",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "SatLoad",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "LinkLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "raw_dv_sats",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"MasterRunID": {
+							"value": "@pipeline().RunId",
+							"type": "Expression"
+						},
+						"load_synapse": {
+							"value": "@pipeline().parameters.load_synapse",
+							"type": "Expression"
+						}
+					}
+				}
+			}
+		],
+		"parameters": {
+			"load_synapse": {
+				"type": "int",
+				"defaultValue": 0
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/raw vault"
+		},
+		"annotations": []
+	}
+}

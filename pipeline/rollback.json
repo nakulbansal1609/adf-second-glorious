@@ -1,0 +1,1545 @@
+{
+	"name": "rollback",
+	"properties": {
+		"activities": [
+			{
+				"name": "LoopParentChildTables",
+				"description": "This will loop the deletion of transient to raw to trusted files for parent and child tables if existing  ",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "SetDay",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetMonth",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetYear",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetParentAndChild').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "TrustedZoneClean",
+							"type": "Switch",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@if(variables('trusted_clean'),if(empty(pipeline().parameters.datetime_cutoff_rollback),'full_rollback','cutoff_rollback'),'no_rollback')",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "full_rollback",
+										"activities": [
+											{
+												"name": "DeleteTrustedFiles",
+												"type": "Delete",
+												"dependsOn": [
+													{
+														"activity": "SoftBackupTrustedFiles",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataset": {
+														"referenceName": "caelum_data_lake_table_lvl",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "trusted",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															}
+														}
+													},
+													"logStorageSettings": {
+														"linkedServiceName": {
+															"referenceName": "datalake",
+															"type": "LinkedServiceReference"
+														},
+														"path": "fs01-dlalwcaelumdevdw01/purge_logs/rollbacks"
+													},
+													"enableLogging": true,
+													"storeSettings": {
+														"type": "AzureBlobFSReadSettings",
+														"recursive": true,
+														"enablePartitionDiscovery": false
+													}
+												}
+											},
+											{
+												"name": "DropShieldTrusted",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[shield_db].[DropShield]",
+													"storedProcedureParameters": {
+														"SqlPool": {
+															"value": {
+																"value": "@pipeline().globalParameters.dw_db_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TableName": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"ZoneClean": {
+															"value": "trusted",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference",
+													"parameters": {
+														"database_name": {
+															"value": "@pipeline().globalParameters.shield_db_name",
+															"type": "Expression"
+														}
+													}
+												}
+											},
+											{
+												"name": "SoftBackupTrustedFiles",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "ParquetSource",
+														"storeSettings": {
+															"type": "AzureBlobFSReadSettings",
+															"recursive": true,
+															"wildcardFolderPath": {
+																"value": "@concat('dw_data_store/','trusted','/',item().country_name,'/',pipeline().parameters.source,'/',item().table_name)",
+																"type": "Expression"
+															},
+															"wildcardFileName": "*",
+															"enablePartitionDiscovery": false
+														}
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "caelum_data_lake_table_lvl",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "trusted",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "caelum_data_lake_soft_rollback",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "trusted",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															},
+															"rollback_dt": {
+																"value": "@utcnow()",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "ErrorHandlingBackupTrusted",
+												"type": "Wait",
+												"dependsOn": [
+													{
+														"activity": "SoftBackupTrustedFiles",
+														"dependencyConditions": [
+															"Failed"
+														]
+													},
+													{
+														"activity": "DeleteTrustedFiles",
+														"dependencyConditions": [
+															"Skipped"
+														]
+													}
+												],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									},
+									{
+										"value": "cutoff_rollback",
+										"activities": [
+											{
+												"name": "CutoffRollbackTrusted",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "RollbackTrustedFiles",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[shield_db].[CutoffRollback]",
+													"storedProcedureParameters": {
+														"CutoffDt": {
+															"value": {
+																"value": "@variables('date_cutoff')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"SqlPool": {
+															"value": {
+																"value": "@pipeline().globalParameters.dw_db_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TableName": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"ZoneClean": {
+															"value": "trusted",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference",
+													"parameters": {
+														"database_name": {
+															"value": "@pipeline().globalParameters.shield_db_name",
+															"type": "Expression"
+														}
+													}
+												}
+											},
+											{
+												"name": "RollbackTrustedFiles",
+												"type": "DatabricksNotebook",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"notebookPath": {
+														"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'rollback/rollback')\n",
+														"type": "Expression"
+													},
+													"baseParameters": {
+														"datetime_threshold": {
+															"value": "@variables('date_cutoff')",
+															"type": "Expression"
+														},
+														"zone": "trusted",
+														"country": {
+															"value": "@item().country_name",
+															"type": "Expression"
+														},
+														"source": {
+															"value": "@pipeline().parameters.source",
+															"type": "Expression"
+														},
+														"table": {
+															"value": "@item().table_name",
+															"type": "Expression"
+														},
+														"timestamp": {
+															"value": "@variables('timestamp')",
+															"type": "Expression"
+														},
+														"year": {
+															"value": "@variables('year')",
+															"type": "Expression"
+														},
+														"month": {
+															"value": "@variables('month')",
+															"type": "Expression"
+														},
+														"day": {
+															"value": "@variables('day')",
+															"type": "Expression"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "databricks_cs",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "no_rollback",
+										"activities": [
+											{
+												"name": "TrustedZoneCleanNo",
+												"type": "Wait",
+												"dependsOn": [],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									}
+								],
+								"defaultActivities": [
+									{
+										"name": "TrustedZoneCleanDefault",
+										"type": "Wait",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"waitTimeInSeconds": 1
+										}
+									}
+								]
+							}
+						},
+						{
+							"name": "RawZoneClean",
+							"type": "Switch",
+							"dependsOn": [
+								{
+									"activity": "TrustedZoneClean",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@if(variables('raw_clean'),if(empty(pipeline().parameters.datetime_cutoff_rollback),'full_rollback','cutoff_rollback'),'no_rollback')",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "full_rollback",
+										"activities": [
+											{
+												"name": "DeleteRawFiles",
+												"type": "Delete",
+												"dependsOn": [
+													{
+														"activity": "SoftBackupRawFiles",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataset": {
+														"referenceName": "caelum_data_lake_table_lvl",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "raw",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															}
+														}
+													},
+													"logStorageSettings": {
+														"linkedServiceName": {
+															"referenceName": "datalake",
+															"type": "LinkedServiceReference"
+														},
+														"path": "fs01-dlalwcaelumdevdw01/purge_logs/rollbacks"
+													},
+													"enableLogging": true,
+													"storeSettings": {
+														"type": "AzureBlobFSReadSettings",
+														"recursive": true,
+														"enablePartitionDiscovery": false
+													}
+												}
+											},
+											{
+												"name": "DropShield",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[shield_db].[DropShield]",
+													"storedProcedureParameters": {
+														"SqlPool": {
+															"value": {
+																"value": "@pipeline().globalParameters.dw_db_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TableName": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"ZoneClean": {
+															"value": "raw",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference",
+													"parameters": {
+														"database_name": {
+															"value": "@pipeline().globalParameters.shield_db_name",
+															"type": "Expression"
+														}
+													}
+												}
+											},
+											{
+												"name": "SoftBackupRawFiles",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "ParquetSource",
+														"storeSettings": {
+															"type": "AzureBlobFSReadSettings",
+															"recursive": true,
+															"wildcardFolderPath": {
+																"value": "@concat('dw_data_store/','raw','/',item().country_name,'/',pipeline().parameters.source,'/',item().table_name)",
+																"type": "Expression"
+															},
+															"wildcardFileName": "*",
+															"enablePartitionDiscovery": false
+														}
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "caelum_data_lake_table_lvl",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "raw",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "caelum_data_lake_soft_rollback",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "raw",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															},
+															"rollback_dt": {
+																"value": "@utcnow()",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "ErrorHandlingBackupRaw",
+												"type": "Wait",
+												"dependsOn": [
+													{
+														"activity": "SoftBackupRawFiles",
+														"dependencyConditions": [
+															"Failed"
+														]
+													},
+													{
+														"activity": "DeleteRawFiles",
+														"dependencyConditions": [
+															"Skipped"
+														]
+													}
+												],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									},
+									{
+										"value": "cutoff_rollback",
+										"activities": [
+											{
+												"name": "CutoffRollbackRaw",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "RollbackRawFiles",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[shield_db].[CutoffRollback]",
+													"storedProcedureParameters": {
+														"CutoffDt": {
+															"value": {
+																"value": "@variables('date_cutoff')",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"SqlPool": {
+															"value": {
+																"value": "@pipeline().globalParameters.dw_db_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TableName": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"ZoneClean": {
+															"value": "raw",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference",
+													"parameters": {
+														"database_name": {
+															"value": "@pipeline().globalParameters.shield_db_name",
+															"type": "Expression"
+														}
+													}
+												}
+											},
+											{
+												"name": "RollbackRawFiles",
+												"type": "DatabricksNotebook",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"notebookPath": {
+														"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'rollback/rollback')\n",
+														"type": "Expression"
+													},
+													"baseParameters": {
+														"datetime_threshold": {
+															"value": "@variables('date_cutoff')",
+															"type": "Expression"
+														},
+														"zone": "raw",
+														"country": {
+															"value": "@item().country_name",
+															"type": "Expression"
+														},
+														"source": {
+															"value": "@pipeline().parameters.source",
+															"type": "Expression"
+														},
+														"table": {
+															"value": "@item().table_name",
+															"type": "Expression"
+														},
+														"timestamp": {
+															"value": "@variables('timestamp')",
+															"type": "Expression"
+														},
+														"year": {
+															"value": "@variables('year')",
+															"type": "Expression"
+														},
+														"month": {
+															"value": "@variables('month')",
+															"type": "Expression"
+														},
+														"day": {
+															"value": "@variables('day')",
+															"type": "Expression"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "databricks_cs",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "no_rollback",
+										"activities": [
+											{
+												"name": "RawZoneCleanNo",
+												"type": "Wait",
+												"dependsOn": [],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									}
+								],
+								"defaultActivities": [
+									{
+										"name": "RawZoneCleanDefault",
+										"type": "Wait",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"waitTimeInSeconds": 1
+										}
+									}
+								]
+							}
+						},
+						{
+							"name": "TransientZoneClean",
+							"type": "Switch",
+							"dependsOn": [
+								{
+									"activity": "RawZoneClean",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@if(variables('trusted_clean'),if(empty(pipeline().parameters.datetime_cutoff_rollback),'full_rollback','cutoff_rollback'),'no_rollback')",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "full_rollback",
+										"activities": [
+											{
+												"name": "DeleteTransientFiles",
+												"type": "Delete",
+												"dependsOn": [
+													{
+														"activity": "SoftBackupTransientFiles",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"dataset": {
+														"referenceName": "caelum_data_lake_table_lvl",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "transient",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															}
+														}
+													},
+													"logStorageSettings": {
+														"linkedServiceName": {
+															"referenceName": "datalake",
+															"type": "LinkedServiceReference"
+														},
+														"path": "fs01-dlalwcaelumdevdw01/purge_logs/rollbacks"
+													},
+													"enableLogging": true,
+													"storeSettings": {
+														"type": "AzureBlobFSReadSettings",
+														"recursive": true,
+														"enablePartitionDiscovery": false
+													}
+												}
+											},
+											{
+												"name": "SoftBackupTransientFiles",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "ParquetSource",
+														"storeSettings": {
+															"type": "AzureBlobFSReadSettings",
+															"recursive": true,
+															"wildcardFolderPath": {
+																"value": "@concat('dw_data_store/','transient','/',item().country_name,'/',pipeline().parameters.source,'/',item().table_name)",
+																"type": "Expression"
+															},
+															"wildcardFileName": "*",
+															"enablePartitionDiscovery": false
+														}
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "caelum_data_lake_table_lvl",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "transient",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "caelum_data_lake_soft_rollback",
+														"type": "DatasetReference",
+														"parameters": {
+															"country": {
+																"value": "@item().country_name",
+																"type": "Expression"
+															},
+															"zone": "transient",
+															"source": {
+																"value": "@pipeline().parameters.source",
+																"type": "Expression"
+															},
+															"table": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"adls_dw_container_name": {
+																"value": "@pipeline().globalParameters.adls_dw_container_name",
+																"type": "Expression"
+															},
+															"rollback_dt": {
+																"value": "@utcnow()",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "ErrorHandlingBackupTransient",
+												"type": "Wait",
+												"dependsOn": [
+													{
+														"activity": "SoftBackupTransientFiles",
+														"dependencyConditions": [
+															"Failed"
+														]
+													},
+													{
+														"activity": "DeleteTransientFiles",
+														"dependencyConditions": [
+															"Skipped"
+														]
+													}
+												],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									},
+									{
+										"value": "cutoff_rollback",
+										"activities": [
+											{
+												"name": "RollbackTransientFiles",
+												"type": "DatabricksNotebook",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"notebookPath": {
+														"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'rollback/rollback')\n",
+														"type": "Expression"
+													},
+													"baseParameters": {
+														"datetime_threshold": {
+															"value": "@variables('date_cutoff')",
+															"type": "Expression"
+														},
+														"zone": "transient",
+														"country": {
+															"value": "@item().country_name",
+															"type": "Expression"
+														},
+														"source": {
+															"value": "@pipeline().parameters.source",
+															"type": "Expression"
+														},
+														"table": {
+															"value": "@item().table_name",
+															"type": "Expression"
+														},
+														"timestamp": {
+															"value": "@variables('timestamp')",
+															"type": "Expression"
+														},
+														"year": {
+															"value": "@variables('year')",
+															"type": "Expression"
+														},
+														"month": {
+															"value": "@variables('month')",
+															"type": "Expression"
+														},
+														"day": {
+															"value": "@variables('day')",
+															"type": "Expression"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "databricks_cs",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "no_rollback",
+										"activities": [
+											{
+												"name": "TransientZoneCleanNo",
+												"type": "Wait",
+												"dependsOn": [],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									}
+								],
+								"defaultActivities": [
+									{
+										"name": "TransientZoneCleanDefault",
+										"type": "Wait",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"waitTimeInSeconds": 1
+										}
+									}
+								]
+							}
+						},
+						{
+							"name": "MetadataClean",
+							"type": "Switch",
+							"dependsOn": [
+								{
+									"activity": "TransientZoneClean",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@if(pipeline().parameters.partial_rollback,if(empty(pipeline().parameters.datetime_cutoff_rollback), 'no_rollback', 'cutoff_rollback'),if(empty(pipeline().parameters.datetime_cutoff_rollback), 'full_rollback', 'cutoff_rollback'))\n\n",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "full_rollback",
+										"activities": [
+											{
+												"name": "RollBackTableIngestion",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[dbo].[RollBackTableIngestion]",
+													"storedProcedureParameters": {
+														"TableName": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"SourceID": {
+															"value": {
+																"value": "@item().source_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TriggerID": {
+															"value": {
+																"value": "@item().trigger_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"CountryID": {
+															"value": {
+																"value": "@item().country_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "metastore",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "cutoff_rollback",
+										"activities": [
+											{
+												"name": "CutoffRollBackTableIngestion",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[dbo].[RollBackCutoffTableIngestion]",
+													"storedProcedureParameters": {
+														"TableName": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"SourceID": {
+															"value": {
+																"value": "@item().source_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"TriggerID": {
+															"value": {
+																"value": "@item().trigger_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"CountryID": {
+															"value": {
+																"value": "@item().country_id",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"MaxTimestamp": {
+															"value": {
+																"value": "@pipeline().parameters.datetime_cutoff_rollback",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"MaxIndex": {
+															"value": "1",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "metastore",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "no_rollback",
+										"activities": [
+											{
+												"name": "MetadataCleanNo",
+												"type": "Wait",
+												"dependsOn": [],
+												"userProperties": [],
+												"typeProperties": {
+													"waitTimeInSeconds": 1
+												}
+											}
+										]
+									}
+								],
+								"defaultActivities": [
+									{
+										"name": "MetadataCleanDefault",
+										"type": "Wait",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"waitTimeInSeconds": 1
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetParentAndChild",
+				"description": "Lookup to check if the parent table has any childs",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "PartialRollbackCond",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetParentAndChild]",
+						"storedProcedureParameters": {
+							"table_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "PartialRollbackCond",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@pipeline().parameters.partial_rollback",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "SetPartialRollback",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "transient_clean",
+								"value": false
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "NullCutoffSet",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetParentAndChild",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date_cutoff",
+					"value": {
+						"value": "@coalesce(pipeline().parameters.datetime_cutoff_rollback,'1900-01-01')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetYear",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetCurrentTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "year",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'yyyy')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetMonth",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetCurrentTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "month",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'MM')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetDay",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetCurrentTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "day",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'dd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetCurrentTimestamp",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "NullCutoffSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date",
+					"value": {
+						"value": "@utcnow()",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetTimestamp",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetCurrentTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "timestamp",
+					"value": {
+						"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+						"type": "Expression"
+					}
+				}
+			}
+		],
+		"parameters": {
+			"source": {
+				"type": "string",
+				"defaultValue": "NOVA"
+			},
+			"table_name": {
+				"type": "string",
+				"defaultValue": "NOVA_ncUser"
+			},
+			"partial_rollback": {
+				"type": "bool",
+				"defaultValue": false
+			},
+			"datetime_cutoff_rollback": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"transient_clean": {
+				"type": "Boolean",
+				"defaultValue": true
+			},
+			"raw_clean": {
+				"type": "Boolean",
+				"defaultValue": true
+			},
+			"trusted_clean": {
+				"type": "Boolean",
+				"defaultValue": true
+			},
+			"date_cutoff": {
+				"type": "String"
+			},
+			"date": {
+				"type": "String"
+			},
+			"year": {
+				"type": "String"
+			},
+			"month": {
+				"type": "String"
+			},
+			"day": {
+				"type": "String"
+			},
+			"timestamp": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-14T09:09:15Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

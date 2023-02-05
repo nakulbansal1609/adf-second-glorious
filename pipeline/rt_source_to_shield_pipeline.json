@@ -1,0 +1,1057 @@
+{
+	"name": "rt_source_to_shield_pipeline",
+	"properties": {
+		"description": "This pipeline is the near real time batch schedule for injesting data from tables which have frequent triggers.",
+		"activities": [
+			{
+				"name": "SourceToShield",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "CheckSourceTableName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderQuery": {
+							"value": "@{variables('source_query')}",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "SqlDWSink",
+						"allowPolyBase": true,
+						"polyBaseSettings": {
+							"rejectValue": 0,
+							"rejectType": "value",
+							"useTypeDefault": true
+						},
+						"tableOption": "autoCreate",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": true,
+					"stagingSettings": {
+						"linkedServiceName": {
+							"referenceName": "datalake",
+							"type": "LinkedServiceReference"
+						},
+						"path": {
+							"value": "@concat(pipeline().globalParameters.adls_dw_container_name,'/staging')",
+							"type": "Expression"
+						},
+						"enableCompression": true
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "parameterized_source",
+						"type": "DatasetReference",
+						"parameters": {
+							"schema": "@variables('database_schema')",
+							"table_name": "@pipeline().parameters.table_name",
+							"server_path": "@variables('server_path')",
+							"database_name": "@variables('database_name')"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Shield_rt",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": {
+								"value": "@variables('source_table_name')",
+								"type": "Expression"
+							},
+							"db_schema": {
+								"value": "@variables('sink_staging_schema')",
+								"type": "Expression"
+							},
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "SetDatabaseForLoad",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "database_name",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.system_db",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "UpdateMetadata",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckLoadType",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "UPDATE adf_metastore.dbo.table_list SET max_timestamp='@{variables('max_timestamp')}',\nmax_index = @{variables('max_index')}\nWHERE table_name='@{pipeline().parameters.table_name}'; \nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "SetServerForLoad",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "server_path",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.system_url",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "UpdatePipelineLog",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SourceToShield",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [adf_metastore].[dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Source-To-@{pipeline().globalParameters.shield_db_name}-@{variables('load_type')}' StepName,\n'source.@{variables('source_table_name')}' as Source,\n'@{pipeline().globalParameters.shield_db_name}.@{variables('source_table_name')}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('SourceToShield').output.rowsCopied}' as rowsCopied,\n'@{activity('SourceToShield').output.rowsRead}' as RowsRead,\n'@{activity('SourceToShield').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToShield').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToShield').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToShield').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToShield').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToShield').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToShield').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToShield').output.dataWritten),1048576)}' as data_volume_mb;\n\nSELECT * FROM [adf_metastore].[dbo].[pipeline_log]\nWHERE pipeline_name='@{pipeline().RunId}'",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetTableMetadata",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckIfInitlizeMaxTimestamp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[GetTableMetadata]",
+						"storedProcedureParameters": {
+							"SourceName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.source",
+									"type": "Expression"
+								}
+							},
+							"TableName": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_tablelist",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "SetDBShemaForLoad",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "database_schema",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.system_db_schema",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "CheckLoadType",
+				"description": "The activity will check for load type if 'historical' or 'incremental' and take action accordingly",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "SourceToShield",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetTableMetadata').output.firstRow.load_type,'historical')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "InctlDMLOnHistl",
+							"description": "This activity will run the stored procedure to perform DML operations from CDC Load  on Base Table loaded earlier to sync up the DML operations as per source system",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlDWSource",
+									"sqlReaderStoredProcedureName": "[dbo].[DMLFromStage]",
+									"storedProcedureParameters": {
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											}
+										},
+										"RunId": {
+											"type": "String",
+											"value": {
+												"value": "@variables('MasterRunID')",
+												"type": "Expression"
+											}
+										},
+										"LoadType": {
+											"type": "String",
+											"value": {
+												"value": "@variables('load_type')",
+												"type": "Expression"
+											}
+										},
+										"TableNameCDC": {
+											"type": "String",
+											"value": {
+												"value": "@variables('source_table_name')",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Shield_rt",
+									"type": "DatasetReference",
+									"parameters": {
+										"TABLE_NAME": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"db_schema": "dbo",
+										"shield_db_name": {
+											"value": "@pipeline().globalParameters.shield_db_name",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "LoadStageToRTSchema",
+							"description": "This will load the data from staging schema to rt_ingestion schema",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlDWSource",
+									"sqlReaderStoredProcedureName": "[shield_db].[LoadFromStage]",
+									"storedProcedureParameters": {
+										"DatabaseName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().globalParameters.shield_db_name",
+												"type": "Expression"
+											}
+										},
+										"StagingSchema": {
+											"type": "String",
+											"value": {
+												"value": "@variables('sink_staging_schema')",
+												"type": "Expression"
+											}
+										},
+										"RTSchema": {
+											"type": "String",
+											"value": {
+												"value": "@variables('sink_rt_schema')",
+												"type": "Expression"
+											}
+										},
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											}
+										},
+										"RowKey": {
+											"type": "String",
+											"value": "Id"
+										},
+										"RunId": {
+											"type": "String",
+											"value": {
+												"value": "@variables('MasterRunID')",
+												"type": "Expression"
+											}
+										},
+										"LoadType": {
+											"type": "String",
+											"value": {
+												"value": "@variables('load_type')",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Shield_rt",
+									"type": "DatasetReference",
+									"parameters": {
+										"TABLE_NAME": "''",
+										"db_schema": "shield_db",
+										"shield_db_name": {
+											"value": "@pipeline().globalParameters.shield_db_name",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "FetchDMLCounters",
+				"description": "This activity will fetch the DML counters form the dml queries performed on target system",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckLoadType",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * \nFROM [rt_ingestion].[rt_dml_counters]\nWHERE run_id = '@{variables('MasterRunID')}';",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield_rt",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"db_schema": {
+								"value": "@variables('sink_rt_schema')",
+								"type": "Expression"
+							},
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "CheckSourceTableName",
+				"description": "This activity will capture the Actual name of the source table that needed to be used for ingestion",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetDBShemaForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetServerForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetDatabaseForLoad",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetSourceLoadType",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('load_type'),'historical')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetSourceTableNameInctl",
+							"description": "This activity will set the variable of source table name when the load type is not historical, ie it is incremental",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "source_table_name",
+								"value": {
+									"value": "@activity('GetTableMetadata').output.firstRow.table_name_cdc",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "GetSourceMaxIndex",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SetSourceTableNameInctl",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "GetSourceMaxTimestamp",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "SELECT COALESCE(max(@{activity('GetTableMetadata').output.firstRow.index_column}),0)+@{activity('GetTableMetadata').output.firstRow.max_index} max_index\nFROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')} \nWHERE @{activity('GetTableMetadata').output.firstRow.delta_column} > '@{activity('GetTableMetadata').output.firstRow.max_timestamp}' AND @{activity('GetTableMetadata').output.firstRow.delta_column} <= \n'@{activity('GetSourceMaxTimestamp').output.firstRow.timestamp}'",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": "@variables('database_schema')",
+										"table_name": "@pipeline().parameters.table_name",
+										"server_path": "@variables('server_path')",
+										"database_name": "@variables('database_name')"
+									}
+								}
+							}
+						},
+						{
+							"name": "GetSourceMaxTimestamp",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SetSourceTableNameInctl",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "SELECT MAX(v) as timestamp FROM (VALUES \n((SELECT max(@{activity('GetTableMetadata').output.firstRow.delta_column}) FROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')})),\n('@{activity('GetTableMetadata').output.firstRow.max_timestamp}')\n) AS value(v);",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": "@variables('database_schema')",
+										"table_name": "@pipeline().parameters.table_name",
+										"server_path": "@variables('server_path')",
+										"database_name": "@variables('database_name')"
+									}
+								}
+							}
+						},
+						{
+							"name": "SetQueryInctl",
+							"description": "This activity will set the query for full/historic load form the source table",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceMaxTimestamp",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "source_query",
+								"value": {
+									"value": "SELECT * FROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')} WHERE @{activity('GetTableMetadata').output.firstRow.delta_column} > '@{activity('GetTableMetadata').output.firstRow.max_timestamp}' AND @{activity('GetTableMetadata').output.firstRow.delta_column} <= \n'@{activity('GetSourceMaxTimestamp').output.firstRow.timestamp}'",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetMaxIndexVariable",
+							"description": "This activity will copy the max index into a pipeline variable so can be resued commonly ",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceMaxIndex",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "max_index",
+								"value": {
+									"value": "@{activity('GetSourceMaxIndex').output.firstRow.max_index}",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetMaxTimestampVariable",
+							"description": "This activity set the max timestamp value into a pipeline variable to be used commonly later on.",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceMaxTimestamp",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "max_timestamp",
+								"value": {
+									"value": "@activity('GetSourceMaxTimestamp').output.firstRow.timestamp",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetSourceTableNameHist",
+							"description": "This activity will set the variable of source table name when the load type is historical",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "source_table_name",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetQueryHist",
+							"description": "This activity will set the query for full/historic load form the source table",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "SetSourceTableNameHist",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "source_query",
+								"value": {
+									"value": "SELECT * FROM @{variables('database_name')}.@{variables('database_schema')}.@{variables('source_table_name')}\n",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetMaxTimestampHist",
+							"description": "This will set the current timestamp utc now for the varible, to capture the max timestamp that can be referenced as base for incremental load lollowed after it.",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "SetSourceTableNameHist",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "GetSourceServerCurrentTime",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "max_timestamp",
+								"value": {
+									"value": "@activity('GetSourceServerCurrentTime').output.firstRow.src_server_time",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "GetSourceServerCurrentTime",
+							"description": "This activity will fetch the curent timestamp from the source server itself to avoid mismatch of timestamp",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": "SELECT CURRENT_TIMESTAMP AS src_server_time;",
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": "@variables('database_schema')",
+										"table_name": "@pipeline().parameters.table_name",
+										"server_path": "@variables('server_path')",
+										"database_name": "@variables('database_name')"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetSourceLoadType",
+				"description": "This activity will set the load type variable to either of the values form the adf meatastore",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetTableMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "load_type",
+					"value": {
+						"value": "@activity('GetTableMetadata').output.firstRow.load_type",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "CheckUpdateStageLogs",
+				"description": "This activity check for the load type and and update the pipelogs for staging of dmls done on the target system.",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "FetchDMLCounters",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('load_type'),'historical')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "UpdatePipelineLogInctl",
+							"description": "This activity take care of pipeline logs for counters obtained from DML txns done on full load in rt schema using cdc data from source",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [adf_metastore].[dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Staging-CDC-RTSchema-Insert' StepName,\n'source.@{variables('source_table_name')}' as Source,\n'@{pipeline().globalParameters.shield_db_name}.@{variables('source_table_name')}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('FetchDMLCounters').output.firstRow.rows_inserted}' as rowsCopied,\n'@{activity('FetchDMLCounters').output.firstRow.rows_inserted}' as RowsRead,\n'@{activity('SourceToShield').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToShield').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToShield').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToShield').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToShield').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToShield').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToShield').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name\nUNION\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Staging-CDC-RTSchema-Update' StepName,\n'source.@{variables('source_table_name')}' as Source,\n'@{pipeline().globalParameters.shield_db_name}.@{variables('source_table_name')}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('FetchDMLCounters').output.firstRow.rows_updated}' as rowsCopied,\n'@{activity('FetchDMLCounters').output.firstRow.rows_updated}' as RowsRead,\n'@{activity('SourceToShield').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToShield').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToShield').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToShield').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToShield').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToShield').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToShield').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToShield').output.dataWritten),1048576)}' as data_volume_mb\nUNION\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Staging-CDC-RTSchema-Delete' StepName,\n'source.@{variables('source_table_name')}' as Source,\n'@{pipeline().globalParameters.shield_db_name}.@{variables('source_table_name')}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('FetchDMLCounters').output.firstRow.rows_deleted}' as rowsCopied,\n'@{activity('FetchDMLCounters').output.firstRow.rows_deleted}' as RowsRead,\n'@{activity('SourceToShield').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToShield').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToShield').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToShield').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToShield').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToShield').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToShield').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToShield').output.dataWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "UpdatePipelineLogHist",
+							"description": "This activity logs the pieline logs for the data ingestion from stage to rt schema for full / hist load",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [adf_metastore].[dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{variables('MasterRunID')}' as RunId,\n'Staging-To-RTSchema' StepName,\n'source.@{variables('source_table_name')}' as Source,\n'@{pipeline().globalParameters.shield_db_name}.@{variables('source_table_name')}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('FetchDMLCounters').output.firstRow.rows_inserted}' as rowsCopied,\n'@{activity('FetchDMLCounters').output.firstRow.rows_inserted}' as RowsRead,\n'@{activity('SourceToShield').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('SourceToShield').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('SourceToShield').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('SourceToShield').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('SourceToShield').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{activity('SourceToShield').output.executionDetails[0].status}' as Execution_Status,\n'@{activity('SourceToShield').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.timeToFirstByte}' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('SourceToShield').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('SourceToShield').output.dataWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetCurrentTimestamp",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date",
+					"value": {
+						"value": "@utcnow()",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetCurrentMasterRunID",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "MasterRunID",
+					"value": {
+						"value": "@pipeline().RunId",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "CheckIfInitlizeMaxTimestamp",
+				"description": "This acivity will check if the initilaize full loaded is needed to run a stored procedure to initialize the timestamp in metastore, this will then always run Full load ingestion",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(pipeline().parameters.Initialize_full_load,true)",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "InitTableTimestampIndex",
+							"description": "This activity will run the stored procedure to initialize the max_timestamp and max_initialize values to their default values. This will ensure the pipeline will trigger the Full load ",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderStoredProcedureName": "[dbo].[InitTableTimestampIndex]",
+									"storedProcedureParameters": {
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore_tablelist",
+									"type": "DatasetReference"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string",
+				"defaultValue": "lin_collectionweb_groups"
+			},
+			"source": {
+				"type": "string",
+				"defaultValue": "NOVA"
+			},
+			"Initialize_full_load": {
+				"type": "bool",
+				"defaultValue": false
+			},
+			"testing": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"server_path": {
+				"type": "String"
+			},
+			"database_name": {
+				"type": "String"
+			},
+			"MasterRunID": {
+				"type": "String"
+			},
+			"database_schema": {
+				"type": "String"
+			},
+			"sink_staging_schema": {
+				"type": "String",
+				"defaultValue": "staging"
+			},
+			"sink_rt_schema": {
+				"type": "String",
+				"defaultValue": "rt_ingestion"
+			},
+			"load_type": {
+				"type": "String"
+			},
+			"source_table_name": {
+				"type": "String"
+			},
+			"source_query": {
+				"type": "String"
+			},
+			"max_timestamp": {
+				"type": "String"
+			},
+			"max_index": {
+				"type": "String",
+				"defaultValue": "0"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/Other_Ingestions/Near_Real_Time"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-14T09:09:15Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

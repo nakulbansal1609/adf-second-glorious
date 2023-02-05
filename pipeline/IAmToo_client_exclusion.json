@@ -1,0 +1,511 @@
+{
+	"name": "IAmToo_client_exclusion",
+	"properties": {
+		"activities": [
+			{
+				"name": "IfEnviromentIsDev_ObfuscateData",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(pipeline().globalParameters.environment,'dev')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "LookUpToPickExclusionClientPROD",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "SELECT client_nr FROM dbo.client_exemption_KliNr_list\nWHERE excluded_flag = 1",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								},
+								"firstRowOnly": false
+							}
+						},
+						{
+							"name": "CopyFromObfuscationDbToTransient_copy1",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "LookUpToPickExclusionClientPROD",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "SELECT * FROM [@{pipeline().parameters.staging_obfuscation_database_schema}].[@{pipeline().parameters.staging_table_name}]\nWHERE client_nr NOT IN (activity('LookUpToPickExclusionClient').output)",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".txt"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@pipeline().parameters.staging_database_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.staging_table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@pipeline().parameters.staging_server_path",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@pipeline().parameters.staging_database_name",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "caelum_data_lake_csv",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@pipeline().parameters.country",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.transient_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "@pipeline().parameters.year",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@pipeline().parameters.month",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@pipeline().parameters.day",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "@pipeline().parameters.timestamp",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "QueryToObfuscateDataDEVEnv",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "DROP TABLE IF EXISTS [@{pipeline().parameters.staging_obfuscation_database_schema}].[@{pipeline().parameters.staging_table_name}];\nSELECT * INTO [@{pipeline().parameters.staging_obfuscation_database_name}].[@{pipeline().parameters.staging_obfuscation_database_schema}].[@{pipeline().parameters.staging_table_name}] FROM [@{pipeline().parameters.staging_obfuscation_database_schema}].[@{pipeline().parameters.staging_udf_name}]('1900-05-05 22:37:19.950','2029-12-12 22:37:19.950',0);\nSELECT 1",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@pipeline().parameters.staging_obfuscation_database_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.staging_table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@pipeline().parameters.staging_server_path",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@pipeline().parameters.staging_obfuscation_database_name",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						},
+						{
+							"name": "LookUpToPickExclusionClient",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "QueryToObfuscateDataDEVEnv",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "SELECT STRING_AGG(CONCAT('''',client_nr,''''),',') as klinr_excluded FROM dbo.client_exemption_KliNr_list\nWHERE excluded_flag = 1",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								},
+								"firstRowOnly": true
+							}
+						},
+						{
+							"name": "CopyFromObfuscationDbToTransient",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "LookUpToPickExclusionClient",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "SELECT * FROM [@{pipeline().parameters.staging_obfuscation_database_schema}].[@{pipeline().parameters.staging_table_name}]\nWHERE Client_Id NOT IN (@{activity('LookUpToPickExclusionClient').output.firstRow.klinr_excluded})",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".txt"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@pipeline().parameters.staging_obfuscation_database_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.staging_table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@pipeline().parameters.staging_server_path",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@pipeline().parameters.staging_obfuscation_database_name",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "caelum_data_lake_csv",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@pipeline().parameters.country",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.transient_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "@pipeline().parameters.year",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@pipeline().parameters.month",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@pipeline().parameters.day",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "@pipeline().parameters.timestamp",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "UpdateMetadataEnvDEV",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "CopyFromObfuscationDbToTransient",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "UPDATE adf_metastore.dbo.table_list SET max_timestamp='@{pipeline().parameters.lastModified}',\nmax_index=@{activity('CopyFromObfuscationDbToTransient').output.rowsCopied},\nprev_max_index=@{pipeline().parameters.prev_max_index} \nWHERE table_name='@{pipeline().parameters.table_name}'; \nSELECT 1\n",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							}
+						},
+						{
+							"name": "UpdatePipelineLog_EnvDEV",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "CopyFromObfuscationDbToTransient",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().parameters.MasterRunID}' as RunId,\n'Source-To-@{pipeline().globalParameters.transient_zone_name}' StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('CopyFromObfuscationDbToTransient').output.rowsCopied}' as rowsCopied,\n'@{activity('CopyFromObfuscationDbToTransient').output.rowsRead}' as RowsRead,\n'@{activity('CopyFromObfuscationDbToTransient').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('CopyFromObfuscationDbToTransient').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('CopyFromObfuscationDbToTransient').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].status)),'Succeeded',string(activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].status))}' as Execution_Status,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'NULL' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('CopyFromObfuscationDbToTransient').output.dataWritten),1048576)}' as data_volume_mb\nUNION\nSELECT '@{pipeline().DataFactory}' as DataFactory_Name,\n'@{pipeline().Pipeline}' as Pipeline_Name,\n'@{pipeline().parameters.MasterRunID}' as RunId,\n'SourceCount' StepName,\n'source.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().TriggerType}' as TriggerType,\n'@{pipeline().TriggerId}' as TriggerId,\n'@{pipeline().TriggerName}' as TriggerName,\n'@{pipeline().TriggerTime}' as TriggerTime,\n'@{activity('CopyFromObfuscationDbToTransient').output.rowsCopied}' as rowsCopied,\n'@{activity('CopyFromObfuscationDbToTransient').output.rowsRead}' as RowsRead,\n'@{activity('CopyFromObfuscationDbToTransient').output.usedParallelCopies}' as No_ParallelCopies,\n'@{activity('CopyFromObfuscationDbToTransient').output.copyDuration}' as copyDuration_in_secs,\n'@{activity('CopyFromObfuscationDbToTransient').output.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].source.type}' as Source_Type,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].sink.type}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].status)),'Succeeded',string(activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].status))}' as Execution_Status,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].start}' as CopyActivity_Start_Time,\n'@{utcnow()}' as CopyActivity_End_Time,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].detailedDurations.queuingDuration}' as CopyActivity_queuingDuration_in_secs,\n'NULL' as CopyActivity_timeToFirstByte_in_secs,\n'@{activity('CopyFromObfuscationDbToTransient').output.executionDetails[0].detailedDurations.transferDuration}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(activity('CopyFromObfuscationDbToTransient').output.dataWritten),1048576)}' as data_volume_mb;\n\nSELECT * FROM [dbo].[pipeline_log]\nWHERE pipeline_name='@{pipeline().RunId}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "pipeline_log"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"year": {
+				"type": "string"
+			},
+			"month": {
+				"type": "string"
+			},
+			"day": {
+				"type": "string"
+			},
+			"country": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string"
+			},
+			"table_name": {
+				"type": "string"
+			},
+			"timestamp": {
+				"type": "string"
+			},
+			"prev_max_index": {
+				"type": "string"
+			},
+			"MasterRunId": {
+				"type": "string"
+			},
+			"lastModified": {
+				"type": "string"
+			},
+			"staging_obfuscation_database_schema": {
+				"type": "string"
+			},
+			"staging_table_name": {
+				"type": "string"
+			},
+			"staging_server_path": {
+				"type": "string"
+			},
+			"staging_obfuscation_database_name": {
+				"type": "string"
+			},
+			"staging_udf_name": {
+				"type": "string"
+			},
+			"staging_database_schema": {
+				"type": "string"
+			},
+			"staging_database_name": {
+				"type": "string"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}

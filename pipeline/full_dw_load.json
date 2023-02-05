@@ -1,0 +1,56 @@
+{
+	"name": "full_dw_load",
+	"properties": {
+		"activities": [
+			{
+				"name": "Raw to business load",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Trusted to raw load",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "full_raw_to_business",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true,
+					"parameters": {
+						"time_limit_enforce": {
+							"value": "@pipeline().parameters.biz_time_limit_enforce",
+							"type": "Expression"
+						}
+					}
+				}
+			},
+			{
+				"name": "Trusted to raw load",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "raw_dv_load",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"parameters": {
+			"biz_time_limit_enforce": {
+				"type": "string",
+				"defaultValue": "prev_day"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/etl"
+		},
+		"annotations": []
+	}
+}

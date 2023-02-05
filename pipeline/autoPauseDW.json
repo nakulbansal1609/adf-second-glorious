@@ -1,0 +1,473 @@
+{
+	"name": "autoPauseDW",
+	"properties": {
+		"description": "pause the shield_db",
+		"activities": [
+			{
+				"name": "SetWorkspaceName",
+				"description": "Setting the name of the Workspace as a string variable",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "WorkspaceName",
+					"value": {
+						"value": "@concat('syn-lw-caelum-', pipeline().globalParameters.environment,'-dw')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetSQLPoolName",
+				"description": "Setting the name of the SQL Dedicated Pool as a string variable",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "SQLPoolName",
+					"value": {
+						"value": "@pipeline().globalParameters.shield_db_name",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetResourceGroup",
+				"description": "Setting the name of the Resource Group as a string variable",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "ResourceGroup",
+					"value": {
+						"value": "@pipeline().globalParameters.synapse_resource_group_name",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "QueryHistory",
+				"description": "Finding how many queries were performed during the last half hour on on the SQL dedicated pool.",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT 'adf_lookup', count(*) counter  FROM sys.dm_pdw_exec_requests\nwhere submit_time > DATEADD(MINUTE,-30,CURRENT_TIMESTAMP)\nAND session_id NOT IN (SELECT session_id FROM sys.dm_pdw_exec_sessions\nWHERE sql_spid=@@spid)\nAND session_id NOT IN (SELECT DISTINCT session_id\nFROM sys.dm_pdw_exec_requests\nWHERE command LIKE '%adf_lookup%')\nAND session_id NOT IN (SELECT DISTINCT session_id\nFROM sys.dm_pdw_exec_requests\nWHERE [status] = 'Running' AND session_id=SESSION_ID ( ) )\nAND session_id NOT IN (SELECT DISTINCT session_id\nFROM sys.dm_pdw_exec_sessions\nWHERE login_name LIKE '%System%' or login_name like '%NT AUTHORITY\\SYSTEM%')\nand command not in ('USE [synlwcaelumdevdwsql]', 'SELECT @@SPID;')",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield_staging",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "testing_dq_checks_stg",
+							"zone": "staging",
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": true
+				}
+			},
+			{
+				"name": "SetQueryCounter",
+				"description": "Setting the the numbers of queries performed in the SQL Dedicated Pool as a Boolean variable. True if there were performed queries in the last half hour, False if not.",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "QueryHistory",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "counter",
+					"value": {
+						"value": "@greater(activity('QueryHistory').output.firstRow.counter,0)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetPoolStatus",
+				"description": "Getting the log to determine if the SQL dedicated pool is closed or resume.",
+				"type": "WebActivity",
+				"dependsOn": [
+					{
+						"activity": "SetTimeForActivityLog",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetSubscription",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"url": {
+						"value": "@concat('https://management.azure.com/subscriptions/',variables('SubscriptionID') , '/resourceGroups/',variables('ResourceGroup'),'/providers/Microsoft.Synapse/workspaces/',variables('WorkspaceName'), '/sqlPools/', variables('SQLPoolName'),'?api-version=2021-06-01')",
+						"type": "Expression"
+					},
+					"method": "GET",
+					"authentication": {
+						"type": "MSI",
+						"resource": "https://management.azure.com/"
+					}
+				}
+			},
+			{
+				"name": "SetPoolOpenStatus",
+				"description": "Setting the pool status a Boolean variable. True if the pool is resumed, False if the pool is paused.",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetActivityLog",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "PoolStatus",
+					"value": {
+						"value": "@equals(activity('GetPoolStatus').output.properties.status,'Online')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetPoolResumeTimeLag",
+				"description": "Setting the time since the pool is resumed as a string variable.",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetPoolOpenStatus",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "ResumeTime",
+					"value": {
+						"value": "@string(div(sub(ticks(utcnow()),ticks(formatDateTime(activity('GetActivityLog').output.value[0].eventTimestamp))),600000000))",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetWorkingHoursFlag",
+				"description": "Setting a Boolean variable that determine if the pipeline is running during working hours or off working hour.",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetActivityLog",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "WorkingHour",
+					"value": {
+						"value": "@and(greaterOrEquals(int(substring(string(utcnow()),11,2)), 5), \ngreater(16, int(substring(string(utcnow()),11,2))))",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "CheckNoQuerries",
+				"description": "Determine if the the conditions for pausing the SQL Dedicated Pool are met and if True, apply the Pause API.",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "SetWorkingHoursFlag",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetQueryCounterForFail",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetPoolResumeTimeLagForFail",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@or(and(and(equals(variables('PoolStatus'), true), equals(variables('WorkingHour'), true)), and(greater(int(variables('ResumeTime')),pipeline().parameters.WorkingHoursLag), equals(variables('counter'),true))), and(and(equals(variables('PoolStatus'), true), equals(variables('WorkingHour'), false)), and(greater(int(variables('ResumeTime')),pipeline().parameters.OffWorkingHoursLag), equals(variables('counter'),true))))",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "WaitFALSE",
+							"type": "Wait",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"waitTimeInSeconds": 1
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "pauseDW",
+							"description": "",
+							"type": "WebActivity",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"url": {
+									"value": "@concat('https://management.azure.com/subscriptions/',variables('subscriptionID'),'/resourceGroups/',variables('ResourceGroup'),'/providers/Microsoft.Synapse/workspaces/',variables('WorkspaceName'),'/sqlPools/',variables('SQLPoolName'),'/Pause?api-version=2019-06-01-preview')",
+									"type": "Expression"
+								},
+								"method": "POST",
+								"body": {
+									"value": "@json('{ }')",
+									"type": "Expression"
+								},
+								"authentication": {
+									"type": "MSI",
+									"resource": "https://management.azure.com/"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetTimeForActivityLog",
+				"description": "Setting the time frame for which the activity log will be retrieve",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "TimeForActivityLog",
+					"value": {
+						"value": "@string(addhours(utcnow(), -12))",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetSubscription",
+				"description": "Setting the subscription as a string variable",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetWorkspaceName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetSQLPoolName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetResourceGroup",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "subscriptionID",
+					"value": {
+						"value": "@pipeline().globalParameters.subscription_id",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetActivityLog",
+				"description": "Getting the SQL Dedicated Pool Activity Log to determine the time since the pool is resume.",
+				"type": "WebActivity",
+				"dependsOn": [
+					{
+						"activity": "GetPoolStatus",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"url": {
+						"value": "@concat('https://management.azure.com/subscriptions/',variables('SubscriptionID') , '/providers/Microsoft.Insights/eventtypes/management/values?%24filter=eventTimestamp%20ge%20''', variables('TimeForActivityLog'), '''%20%20and%20resourceProvider%20eq%20''Microsoft.Synapse''&api-version=2015-04-01&%24select=operationName&%24select=eventTimestamp')",
+						"type": "Expression"
+					},
+					"method": "GET",
+					"authentication": {
+						"type": "MSI",
+						"resource": "https://management.azure.com/"
+					}
+				}
+			},
+			{
+				"name": "SetQueryCounterForFail",
+				"description": "Setting a default value if the SQL Dedicated Pool is closed and the QueryHistory Lookup fails.",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "QueryHistory",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "SetQueryCounter",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "counter",
+					"value": {
+						"value": "@greater(1,0)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetPoolResumeTimeLagForFail",
+				"description": "Setting a default value for RezumeTime if the Activity log is empty for the specified hours.",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetPoolResumeTimeLag",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "FailHandler",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "ResumeTime",
+					"value": "'61'"
+				}
+			},
+			{
+				"name": "FailHandler",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "SetPoolResumeTimeLag",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			}
+		],
+		"parameters": {
+			"WorkingHoursLag": {
+				"type": "int",
+				"defaultValue": 60
+			},
+			"OffWorkingHoursLag": {
+				"type": "int",
+				"defaultValue": 30
+			}
+		},
+		"variables": {
+			"subscriptionID": {
+				"type": "String"
+			},
+			"ResourceGroup": {
+				"type": "String"
+			},
+			"counter": {
+				"type": "Boolean"
+			},
+			"SQLPoolName": {
+				"type": "String"
+			},
+			"WorkspaceName": {
+				"type": "String"
+			},
+			"PoolStatus": {
+				"type": "Boolean"
+			},
+			"ResumeTime": {
+				"type": "String"
+			},
+			"WorkingHour": {
+				"type": "Boolean"
+			},
+			"TimeForActivityLog": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}

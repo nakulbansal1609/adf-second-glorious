@@ -1,0 +1,453 @@
+{
+	"name": "client_exclusion_incr_ForLoop",
+	"properties": {
+		"activities": [
+			{
+				"name": "DeleteDuplicateRows_LogMetastore",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "IncrementalForEachTable",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "WITH todelete AS (\n      SELECT p.*,\n             row_number() over (partition by source,table_name,column_name,value order by (select null)) as seqnum\n      FROM [dbo].[@{variables('client_exclusion_metastore_table')}] p\n     )\nDELETE FROM todelete\n    WHERE seqnum > 1;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "GetTableList",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "SetClientExclusionMetastoreTableName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "GetTableList_Query",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "@variables('gettablelist_query')",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''",
+							"schema_name": "''"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "IncrementalForEachTable",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetTableList",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetTableList').output.value",
+						"type": "Expression"
+					},
+					"batchCount": 5,
+					"activities": [
+						{
+							"name": "SetIncrementalServerForLoad",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "incremental_server_path",
+								"value": {
+									"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'LWSQLDEV075.intad1.com','LWSQLPRD068.intad1.com')",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetIncrementalDatabaseForLoad",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "incremental_database_name",
+								"value": {
+									"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'Obfuscated_ODS','NOVATAKEOUT')",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "GetIncrementalSQLClientExclusionDefinition",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderStoredProcedureName": "[dbo].[GenerateSQLClientExemptionDefinition_Incremental]",
+									"storedProcedureParameters": {
+										"KliNr_Inputstring": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.client_exclusion_list",
+												"type": "Expression"
+											}
+										},
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@item().table_name",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							}
+						},
+						{
+							"name": "Copy_Incremental_NovaMini_LogMetastore",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "GetIncrementalSQLClientExclusionDefinition",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "SetIncrementalDatabaseForLoad",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "SetIncrementalServerForLoad",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "SetIncrementalDBShemaForLoad",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "@activity('GetIncrementalSQLClientExclusionDefinition').output.firstRow.sql_definition",
+										"type": "Expression"
+									},
+									"queryTimeout": "06:40:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "AzureSqlSink",
+									"disableMetricsCollection": false
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@variables('database_schema')",
+											"type": "Expression"
+										},
+										"table_name": "''",
+										"server_path": {
+											"value": "@variables('incremental_server_path')",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@variables('incremental_database_name')",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "client_exemption"
+									}
+								}
+							]
+						},
+						{
+							"name": "SetIncrementalDBShemaForLoad",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "incremental_database_schema",
+								"value": {
+									"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'cdc','dbo')",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "SetClientExclusionMetastoreTableName",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "client_exclusion_metastore_table",
+					"value": {
+						"value": "@if(equals(pipeline().globalParameters.environment,'dev'),'client_exemption','client_exemption')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetTableList_Query",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "gettablelist_query",
+					"value": {
+						"value": "@if(equals(empty(string(pipeline().parameters.filtertableForExclusion)),true),'SELECT table_name FROM [dbo].[table_list_client_exemption] WHERE exclusion_flg = 1',concat('SELECT table_name FROM [dbo].[table_list_client_exemption] WHERE table_name=''',pipeline().parameters.filtertableForExclusion,''''))",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "DeleteDuplicateRows_Metastore",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Copy_Incr_NovaMini_Metastore",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "WITH todelete AS (\n      SELECT p.*,\n             row_number() over (partition by source,table_name,column_name order by (select null)) as seqnum\n      FROM [dbo].[@{variables('client_exclusion_metastore_table')}] p\n     )\nDELETE FROM todelete\n    WHERE seqnum > 1;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "Copy_Incr_NovaMini_Metastore",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "DeleteDuplicateRows_LogMetastore",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT DISTINCT source,table_name,column_name FROM [dbo].[@{variables('client_exclusion_metastore_table')}] ",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "AzureSqlSink",
+						"disableMetricsCollection": false
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "client_exemption"
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"client_exclusion_list": {
+				"type": "string",
+				"defaultValue": "42,43,241,280,281,284,285,286,290,291,292,293,294,295,296,297,298,299,302,303,304,305,306,308,310,311,314,316,320,322,323,324,325,326,327,328,329,331,336,343,345,346,347,349,350,351,381,402,403,534,535,590,1297,1302,1338,1357,1482,1488,1513,1681,2326,2588,3304,3469,3537,3563,3614,3635,4167,6352,6617,6797,6843,7009,7033,7034,7035,7040,7049,7061,7108,7112,7150,7200,7201,7220,7337,7384,7449,7806,8031,8038,8039,8052,8550,8600,8667,8893,9047,9227,9232,9233,9234,9235,9239,9240,9241,9242,9243,9247,9251,9252,9264,9312,9334,9342,9364,9434,9470,9518,9998"
+			},
+			"filtertableForExclusion": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"historical_server_path": {
+				"type": "String"
+			},
+			"historical_database_name": {
+				"type": "String"
+			},
+			"database_schema": {
+				"type": "String"
+			},
+			"incremental_server_path": {
+				"type": "String"
+			},
+			"incremental_database_name": {
+				"type": "String"
+			},
+			"client_exclusion_metastore_table": {
+				"type": "String"
+			},
+			"incremental_database_schema": {
+				"type": "String"
+			},
+			"gettablelist_query": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}

@@ -1,0 +1,181 @@
+{
+	"name": "trigger_ingest",
+	"properties": {
+		"activities": [
+			{
+				"name": "GetTriggers",
+				"type": "WebActivity",
+				"dependsOn": [
+					{
+						"activity": "SetParsedSubscription",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetResourceGroup",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"url": {
+						"value": "https://management.azure.com/subscriptions/@{variables('subscriptionId')}/resourceGroups/@{variables('resourceGroup')}/providers/Microsoft.DataFactory/factories/@{pipeline().DataFactory}/triggers?api-version=2018-06-01\n",
+						"type": "Expression"
+					},
+					"method": "GET",
+					"authentication": {
+						"type": "MSI",
+						"resource": "https://management.azure.com/"
+					}
+				}
+			},
+			{
+				"name": "LoopTriggers",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetTriggers",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetTriggers').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "UpsertTrigger",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlMISource",
+									"sqlReaderQuery": {
+										"value": "MERGE adf_trigger_list AS t\nUSING (SELECT '@{item().id}' trigger_adf_id,\n'@{item().name}' trigger_name,\n'@{item().type}' type,\n'@{item().properties.type}' properties_type,\n'@{item().properties.typeProperties.recurrence.frequency}' frequency,\n'@{item().properties.typeProperties.recurrence.interval}' interval,\n'@{item().properties.typeProperties.recurrence.startTime}' start_time,\n'@{item().properties.typeProperties.recurrence.timeZone}' time_zone,\n'@{item().etag}' etag\n            ) AS s\n    ON s.trigger_name = t.trigger_name\nWHEN MATCHED AND (s.etag!=t.etag) THEN UPDATE\n    SET type=s.type, \n        properties_type=s.properties_type, \n        frequency=s.frequency, \n        start_time=s.start_time, \n        time_zone=s.time_zone, \n        etag=s.etag,\n        updated_datetime=CURRENT_TIMESTAMP\nWHEN NOT MATCHED THEN \n    INSERT (trigger_name, type, properties_type, frequency, start_time, time_zone, etag, created_datetime, updated_datetime) \n    VALUES (s.trigger_name, s.type, s.properties_type, s.frequency, s.start_time, s.time_zone, s.etag, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);\nSELECT 1\n\n",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": {
+											"value": "''",
+											"type": "Expression"
+										}
+									}
+								},
+								"firstRowOnly": false
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetSubscription",
+				"description": "test",
+				"type": "WebActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"url": {
+						"value": "https://management.azure.com/subscriptions?api-version=2020-01-01",
+						"type": "Expression"
+					},
+					"method": "GET",
+					"authentication": {
+						"type": "MSI",
+						"resource": "https://management.azure.com/"
+					}
+				}
+			},
+			{
+				"name": "SetParsedSubscription",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "GetSubscription",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "subscriptionId",
+					"value": {
+						"value": "@replace(activity('GetSubscription').output.value[0].id,'/subscriptions/','')\n\n",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetResourceGroup",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetParsedSubscription",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "resourceGroup",
+					"value": {
+						"value": "@pipeline().globalParameters.adf_resource_group_name",
+						"type": "Expression"
+					}
+				}
+			}
+		],
+		"variables": {
+			"test": {
+				"type": "String"
+			},
+			"subscriptionId": {
+				"type": "String"
+			},
+			"resourceGroup": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "general_utilities"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-10T20:05:33Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

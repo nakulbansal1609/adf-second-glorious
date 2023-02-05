@@ -1,0 +1,92 @@
+{
+	"name": "full_raw_to_business",
+	"properties": {
+		"activities": [
+			{
+				"name": "Loop business tables",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Business vault target table list",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Business vault target table list').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"activities": [
+						{
+							"name": "Run raw to business",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "raw_to_business",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"target_table": {
+										"value": "@item().table_name",
+										"type": "Expression"
+									},
+									"time_limit_enforce": {
+										"value": "@pipeline().parameters.time_limit_enforce",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Business vault target table list",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT [table_name]\n  FROM [dv].[bv_target_tables] WHERE [bv_target_table_id] IN (SELECT [bv_target_table_id] FROM [dv].[bv_st_map])",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "bv_target_tables",
+							"schema_name": "dv"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"time_limit_enforce": {
+				"type": "string",
+				"defaultValue": "prev_day"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/etl"
+		},
+		"annotations": []
+	}
+}

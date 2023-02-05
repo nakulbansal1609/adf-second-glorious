@@ -1,0 +1,1295 @@
+{
+	"name": "testing_pipeline",
+	"properties": {
+		"activities": [
+			{
+				"name": "CheckDQs",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetdqQueries",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetdqQueries').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"activities": [
+						{
+							"name": "TestDQonshield",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[shield_db].[test_dqs]",
+								"storedProcedureParameters": {
+									"query1": {
+										"value": {
+											"value": "@item().query1",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"query2": {
+										"value": {
+											"value": "@item().query2",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"run_id": {
+										"value": {
+											"value": "@pipeline().parameters.run_id",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"sql_pool": {
+										"value": {
+											"value": "@pipeline().globalParameters.dw_db_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.shield_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetdqQueries",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "AutomatedTestingPy",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "DelimitedTextSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "DelimitedTextReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "shieldTesting",
+						"type": "DatasetReference",
+						"parameters": {
+							"adls_dw_container_name": {
+								"value": "@pipeline().globalParameters.adls_dw_container_name",
+								"type": "Expression"
+							},
+							"file_name": {
+								"value": "@concat(pipeline().parameters.table_name, '_',pipeline().parameters.run_id)",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "GetPii",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "AutomatedTestingPy",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pii_treatment"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "FilterTable",
+				"type": "Filter",
+				"dependsOn": [
+					{
+						"activity": "GetPii",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetPii').output.value",
+						"type": "Expression"
+					},
+					"condition": {
+						"value": "@equals(string(item().table_name), pipeline().parameters.table_name)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "FilterPartialTokens",
+				"type": "Filter",
+				"dependsOn": [
+					{
+						"activity": "FilterTable",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('FilterTable').output.value",
+						"type": "Expression"
+					},
+					"condition": {
+						"value": "@and(not(startswith(string(item().pii_stategy), 'partial')), not(equals(string(item().pii_stategy), 'support_col')))",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "CheckTokenCollision",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "FilterPartialTokens",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('FilterPartialTokens').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Stored procedure1",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[shield_db].[test_token_collision]",
+								"storedProcedureParameters": {
+									"column": {
+										"value": {
+											"value": "@item().column_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"table": {
+										"value": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"run_id": {
+										"value": {
+											"value": "@pipeline().parameters.run_id",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"sql_pool": {
+										"value": {
+											"value": "@pipeline().globalParameters.dw_db_name",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.shield_db_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "DQResult",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckTokenCollision",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "CheckDQs",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * from [staging].[testing_dq_checks_stg]\nwhere run_id = '@{pipeline().parameters.run_id}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield_staging",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "testing_dq_checks_stg",
+							"zone": "staging",
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "TokenCollisionResult",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "CheckTokenCollision",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "CheckDQs",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlDWSource",
+						"sqlReaderQuery": {
+							"value": "SELECT * from [staging].[testing_token_collision_stg]\nwhere run_id = '@{pipeline().parameters.run_id}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Shield_staging",
+						"type": "DatasetReference",
+						"parameters": {
+							"TABLE_NAME": "testing_token_collision_stg",
+							"zone": "staging",
+							"shield_db_name": {
+								"value": "@pipeline().globalParameters.shield_db_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEachDQ",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "DQResult",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('DQResult').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "InsertDQResults",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [tst].[trusted_test_results]\nSELECT '@{item().query2} - DQ check' as test_name,\n'shield' as zone,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{equals('@{item().result1}', '@{item().result2}')}' as test_result,\n'@{item().run_id}' as run_id,\n'@{variables('timestamp')}' as timestamp;\nSELECT 1\n",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "shield_test_results"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "ForEachTC",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "TokenCollisionResult",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('TokenCollisionResult').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "TokenResults",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "INSERT INTO [tst].[trusted_test_results]\nSELECT '@{concat(item().table,'_',item().column)} - Token colision' as test_name,\n'shield' as zone,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{item().result}' as test_result,\n'@{item().run_id}' as run_id,\n'@{variables('timestamp')}' as timestamp;\nSELECT 1",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "shield_test_results"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "AutomatedTestingPy",
+				"type": "DatabricksNotebook",
+				"dependsOn": [
+					{
+						"activity": "Switch1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"notebookPath": {
+						"value": "@concat(if(equals(pipeline().globalParameters.environment,'dev'),'/Repos/caelum/lowell.caelum.cdp.databricks/','/caelum/'),'automation-testing/testing_script')\n",
+						"type": "Expression"
+					},
+					"baseParameters": {
+						"table_name": {
+							"value": "@pipeline().parameters.table_name",
+							"type": "Expression"
+						},
+						"year": {
+							"value": "@pipeline().parameters.year",
+							"type": "Expression"
+						},
+						"month": {
+							"value": "@pipeline().parameters.month",
+							"type": "Expression"
+						},
+						"day": {
+							"value": "@pipeline().parameters.day",
+							"type": "Expression"
+						},
+						"filename": {
+							"value": "@pipeline().parameters.filename",
+							"type": "Expression"
+						},
+						"run_id": {
+							"value": "@pipeline().parameters.run_id",
+							"type": "Expression"
+						},
+						"source": {
+							"value": "@pipeline().parameters.source",
+							"type": "Expression"
+						},
+						"source_average": {
+							"value": "@variables('average')",
+							"type": "Expression"
+						},
+						"source_sum": {
+							"value": "@variables('sum')",
+							"type": "Expression"
+						},
+						"source_count_distinct": {
+							"value": "@variables('count_distinct')",
+							"type": "Expression"
+						},
+						"aggregateKey": {
+							"value": "@pipeline().parameters.aggregateKey",
+							"type": "Expression"
+						},
+						"env": {
+							"value": "@pipeline().globalParameters.environment",
+							"type": "Expression"
+						},
+						"shield_db": {
+							"value": "@pipeline().globalParameters.shield_db_name",
+							"type": "Expression"
+						},
+						"min_dt": {
+							"value": "@variables('min_dt')",
+							"type": "Expression"
+						},
+						"max_dt": {
+							"value": "@variables('max_dt')",
+							"type": "Expression"
+						},
+						"total_count": {
+							"value": "@variables('total_count')",
+							"type": "Expression"
+						},
+						"delta_column": {
+							"value": "@pipeline().parameters.delta_column",
+							"type": "Expression"
+						},
+						"timestamp": {
+							"value": "@variables('timestamp')",
+							"type": "Expression"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "databricks_cs",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "Switch1",
+				"type": "Switch",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"on": {
+						"value": "@pipeline().parameters.source",
+						"type": "Expression"
+					},
+					"cases": [
+						{
+							"value": "Reference_Data_1",
+							"activities": [
+								{
+									"name": "SetSum_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "sum",
+										"value": {
+											"value": "777",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetCD_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "count_distinct",
+										"value": {
+											"value": "777",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetAvg_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "average",
+										"value": {
+											"value": "777",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetMaxDT_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "max_dt",
+										"value": {
+											"value": "777",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetMinDT_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "min_dt",
+										"value": {
+											"value": "777",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetTotalCount_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "total_count",
+										"value": {
+											"value": "777",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "SetTimestamp_reference",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "timestamp",
+										"value": {
+											"value": "@utcnow()",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					],
+					"defaultActivities": [
+						{
+							"name": "GetSourceAggregates",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SendClientExemptionToSource",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "@replace(replace(activity('CreateSQLQuery').output.firstRow.query,'MaxTimestamp',pipeline().parameters.current_max),'SourceTimestamp',pipeline().parameters.source_max)",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@pipeline().parameters.system_db_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@pipeline().parameters.system_url",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@pipeline().parameters.system_db",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						},
+						{
+							"name": "SetSum",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceAggregates",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "sum",
+								"value": {
+									"value": "@activity('GetSourceAggregates').output.firstRow.sum",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetCD",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceAggregates",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "count_distinct",
+								"value": {
+									"value": "@activity('GetSourceAggregates').output.firstRow.count_distinct",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetAvg",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceAggregates",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "average",
+								"value": {
+									"value": "@activity('GetSourceAggregates').output.firstRow.average",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SendClientExemptionToSource",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "CreateSQLQuery",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								},
+								{
+									"activity": "CreateSQLQueryTotal",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "SELECT *\nFROM dbo.client_exemption\nWHERE table_name='@{pipeline().parameters.table_name}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "SqlServerSink",
+									"tableOption": "autoCreate"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "Log",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@pipeline().parameters.system_db_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@concat('##',pipeline().parameters.table_name,'_agg_tmp')",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@pipeline().parameters.system_url",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@pipeline().parameters.system_db",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "CreateSQLQuery",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderStoredProcedureName": "[dbo].[GetSQLQueryClientAggTesting]",
+									"storedProcedureParameters": {
+										"AggKey": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.aggregateKey",
+												"type": "Expression"
+											}
+										},
+										"DatabaseName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.system_db",
+												"type": "Expression"
+											}
+										},
+										"DatabaseSchema": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.system_db_schema",
+												"type": "Expression"
+											}
+										},
+										"DeltaColumn": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.delta_column",
+												"type": "Expression"
+											}
+										},
+										"GlobalTempTable": {
+											"type": "String",
+											"value": {
+												"value": "@concat(pipeline().parameters.table_name,'_agg_tmp')",
+												"type": "Expression"
+											}
+										},
+										"LoadType": {
+											"type": "String",
+											"value": "historical"
+										},
+										"SourceName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											}
+										},
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							}
+						},
+						{
+							"name": "SetMaxDT",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceAggregates",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "max_dt",
+								"value": {
+									"value": "@activity('GetSourceAggregates').output.firstRow.max_datetime",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetMinDT",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceAggregates",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "min_dt",
+								"value": {
+									"value": "@activity('GetSourceAggregates').output.firstRow.min_datetime",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetTotalCount",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceTotal",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "total_count",
+								"value": {
+									"value": "@activity('GetSourceTotal').output.firstRow.excluded_count",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "SetTimestamp",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "GetSourceAggregates",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "timestamp",
+								"value": {
+									"value": "@utcnow()",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "CreateSQLQueryTotal",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderStoredProcedureName": "[dbo].[GetSQLQueryClientTotalTesting]",
+									"storedProcedureParameters": {
+										"DatabaseName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.system_db",
+												"type": "Expression"
+											}
+										},
+										"DatabaseSchema": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.system_db_schema",
+												"type": "Expression"
+											}
+										},
+										"DeltaColumn": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.delta_column",
+												"type": "Expression"
+											}
+										},
+										"GlobalTempTable": {
+											"type": "String",
+											"value": {
+												"value": "@concat(pipeline().parameters.table_name,'_agg_tmp')",
+												"type": "Expression"
+											}
+										},
+										"SourceName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.source",
+												"type": "Expression"
+											}
+										},
+										"TableName": {
+											"type": "String",
+											"value": {
+												"value": "@pipeline().parameters.table_name",
+												"type": "Expression"
+											}
+										}
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "Metastore",
+									"type": "DatasetReference",
+									"parameters": {
+										"table_name": "''"
+									}
+								}
+							}
+						},
+						{
+							"name": "GetSourceTotal",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "SendClientExemptionToSource",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "SqlServerSource",
+									"sqlReaderQuery": {
+										"value": "@replace(replace(activity('CreateSQLQueryTotal').output.firstRow.query,'MaxTimestamp',pipeline().parameters.current_max),'SourceTimestamp',pipeline().parameters.source_max)",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "parameterized_source",
+									"type": "DatasetReference",
+									"parameters": {
+										"schema": {
+											"value": "@pipeline().parameters.system_db_schema",
+											"type": "Expression"
+										},
+										"table_name": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"server_path": {
+											"value": "@pipeline().parameters.system_url",
+											"type": "Expression"
+										},
+										"database_name": {
+											"value": "@pipeline().parameters.system_db",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"run_id": {
+				"type": "string"
+			},
+			"iterator_run_id": {
+				"type": "string",
+				"defaultValue": "testing_run_id"
+			},
+			"table_name": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string",
+				"defaultValue": "NOVA"
+			},
+			"filename": {
+				"type": "string"
+			},
+			"day": {
+				"type": "string",
+				"defaultValue": "20"
+			},
+			"month": {
+				"type": "string",
+				"defaultValue": "12"
+			},
+			"year": {
+				"type": "string",
+				"defaultValue": "2021"
+			},
+			"aggregateKey": {
+				"type": "string",
+				"defaultValue": "ROW_ID"
+			},
+			"source_max": {
+				"type": "string",
+				"defaultValue": "2021-01-01T00:00:00Z"
+			},
+			"current_max": {
+				"type": "string",
+				"defaultValue": "1900-01-01T00:00:00Z"
+			},
+			"system_db_schema": {
+				"type": "string",
+				"defaultValue": "dbo"
+			},
+			"system_db": {
+				"type": "string",
+				"defaultValue": "Obfuscated_ODS"
+			},
+			"system_url": {
+				"type": "string",
+				"defaultValue": "LWSQLDEV075.intad1.com"
+			},
+			"delta_column": {
+				"type": "string",
+				"defaultValue": "ROW_CREATED_DATETIME"
+			}
+		},
+		"variables": {
+			"sourceTableName": {
+				"type": "String"
+			},
+			"sum": {
+				"type": "String"
+			},
+			"average": {
+				"type": "String"
+			},
+			"count_distinct": {
+				"type": "String"
+			},
+			"server_path": {
+				"type": "String"
+			},
+			"database_schema": {
+				"type": "String"
+			},
+			"database_name": {
+				"type": "String"
+			},
+			"max_dt": {
+				"type": "String"
+			},
+			"min_dt": {
+				"type": "String"
+			},
+			"total_count": {
+				"type": "String"
+			},
+			"timestamp": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Testing_Pipelines/testingPipelines"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-06-17T08:37:25Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

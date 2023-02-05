@@ -1,0 +1,351 @@
+{
+	"name": "load_test",
+	"properties": {
+		"activities": [
+			{
+				"name": "Generate sql",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderStoredProcedureName": "[dbo].[sp_generate_mart_sql]",
+						"storedProcedureParameters": {
+							"query_eval": {
+								"type": "Int32",
+								"value": "0"
+							},
+							"table_name": {
+								"type": "String",
+								"value": {
+									"value": "@pipeline().parameters.table_name",
+									"type": "Expression"
+								}
+							}
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "DIM_Event"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Get table type",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Generate sql",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT [table_type_name]\n  FROM [dv].[mart_target_tables] l \n  JOIN dv.mart_table_types r\n  on l.[table_type_id]=r.[table_type_id]\n  WHERE table_name='@{pipeline().parameters.table_name}'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "s"
+						}
+					}
+				}
+			},
+			{
+				"name": "Loop thorugh all mappings",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get table type",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "MasterRunIDSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Generate sql').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Table type change",
+							"type": "Switch",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"on": {
+									"value": "@activity('Get table type').output.firstRow.table_type_name",
+									"type": "Expression"
+								},
+								"cases": [
+									{
+										"value": "SCD1",
+										"activities": [
+											{
+												"name": "Load SCD1",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_scd1_load]",
+													"storedProcedureParameters": {
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@item().sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": {
+																"value": "@pipeline().parameters.schema_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "SCD2",
+										"activities": [
+											{
+												"name": "Load SCD2 sp",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_scd2_load]",
+													"storedProcedureParameters": {
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@item().sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": {
+																"value": "@pipeline().parameters.schema_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_table": {
+															"value": {
+																"value": "@pipeline().parameters.table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									},
+									{
+										"value": "FACT",
+										"activities": [
+											{
+												"name": "Load Fact",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "7.00:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[etl].[sp_fact_load]",
+													"storedProcedureParameters": {
+														"run_id": {
+															"value": {
+																"value": "@pipeline().parameters.MasterRunID",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"sql_query": {
+															"value": {
+																"value": "@item().sql",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"target_schema": {
+															"value": "",
+															"type": "String"
+														},
+														"target_table": {
+															"value": "",
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "shield_db",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									}
+								]
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "MasterRunIDSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.MasterRunID)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunId",
+								"value": {
+									"value": "@pipeline().parameters.MasterRunID",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentMasterRunID",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "MasterRunId",
+								"value": {
+									"value": "@pipeline().RunId",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"table_name": {
+				"type": "string",
+				"defaultValue": "DIM_Event"
+			},
+			"MasterRunID": {
+				"type": "string"
+			},
+			"schema_name": {
+				"type": "string",
+				"defaultValue": "mart"
+			}
+		},
+		"variables": {
+			"MasterRunId": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/information_mart"
+		},
+		"annotations": []
+	}
+}

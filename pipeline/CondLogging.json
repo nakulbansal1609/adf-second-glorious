@@ -1,0 +1,944 @@
+{
+	"name": "CondLogging",
+	"properties": {
+		"activities": [
+			{
+				"name": "RawRejected_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].bytesWritten), 1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "TransientRejected_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten}+@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Shield_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-ToPII-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten}+@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Trusted_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.trusted_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.trusted_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawBadDataShield.stages[0].time},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.TrustedZoneSink.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "TransientRejected_Failed_log",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "TransientRejected_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "ErrorPass_TrR",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'transient.@{pipeline().parameters.table_name}' as Source,\n'Shield.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Raw_log",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.raw_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].time})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime} + @{pipeline().parameters.dataflow_metrics.runStatus.metrics.TransientBadDataShield.stages[0].time},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "RawRejected_Failed_log",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "RawRejected_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "ErrorPass_RR",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Shield_noTransientReject",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Shield_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "Shield_Wait1",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-ToPII-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Trusted_Failed_log",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Trusted_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "ErrorPass_Tu",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.trusted_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.trusted_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "ErrorPass_Tu",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Trusted_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT 1",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "ErrorPass_RR",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "RawRejected_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT 1",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "ErrorPass_R",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Raw_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlMISource",
+						"sqlReaderQuery": "SELECT 1",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "ErrorPass_TrR",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "TransientRejected_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT 1",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "''"
+						}
+					}
+				}
+			},
+			{
+				"name": "Raw_Failed_log",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Raw_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "ErrorPass_R",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.raw_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten}' as rowsCopied,\n@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.rowsWritten} as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs,\n'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.RawZoneSink.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "RawRejected_Wait",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "RawRejected_Failed_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			},
+			{
+				"name": "RawRejected_Final",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "RawRejected_Failed_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "RawRejected_Wait",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n'0' as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "TransientRejected_Final",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "TransientRejected_Failed_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "Transient_Wait",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'transient.@{pipeline().parameters.table_name}' as Source,\n'Shield.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n'0' as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Transient_Wait",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "TransientRejected_Failed_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			},
+			{
+				"name": "Shield_Wait2",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "Shield_noTransientReject",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			},
+			{
+				"name": "Shield_noRawReject",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Shield_Wait2",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					},
+					{
+						"activity": "Shield_noTransientReject",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-ToPII-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.rowsWritten}' as rowsCopied,\n0 as RowsRead,\n1 as No_ParallelCopies,\n(@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime})/1000 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.store}' as Sink_Type,\n'@{if(contains('Succeeded Completed',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState)),'Succeeded',string(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].progressState))}' as Execution_Status,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime}' as CopyActivity_Start_Time,\nDATEADD(ms,@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime},'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].lastUpdateTime}') as CopyActivity_End_Time,\n'@{pipeline().parameters.dataflow_metrics.runStatus.computeAcquisitionDuration}' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'@{pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.sinkProcessingTime}' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'@{div(float(pipeline().parameters.dataflow_metrics.runStatus.metrics.ShieldSink.stages[0].bytesWritten),1048576)}' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Trusted_Wait",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "Trusted_Failed_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			},
+			{
+				"name": "Trusted_Final",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Trusted_Failed_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					},
+					{
+						"activity": "Trusted_Wait",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.raw_zone_name}-To-@{pipeline().globalParameters.trusted_zone_name}' StepName,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.trusted_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n'0' as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Raw_Wait",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "Raw_Failed_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			},
+			{
+				"name": "Raw_Final",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Raw_Wait",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					},
+					{
+						"activity": "Raw_Failed_log",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n'@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}'  as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-To-@{pipeline().globalParameters.raw_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.raw_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n'0' as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'@{pipeline().parameters.dataflow_metrics.effectiveIntegrationRuntime}' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'adlsgen2' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Shield_Wait3",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "Shield_noRawReject",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			},
+			{
+				"name": "Shield_Final_copy1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Shield_Wait3",
+						"dependencyConditions": [
+							"Skipped"
+						]
+					},
+					{
+						"activity": "Shield_noRawReject",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "INSERT INTO [dbo].[pipeline_log]\nSELECT '@{pipeline().parameters.DataFactory_Name}' as DataFactory_Name,\n '@{pipeline().parameters.Pipeline_Name}' as Pipeline_Name,\n'@{pipeline().parameters.RunId}' as RunId,\n'@{pipeline().globalParameters.transient_zone_name}-ToPII-@{pipeline().globalParameters.shield_zone_name}' StepName,\n'@{pipeline().globalParameters.transient_zone_name}.@{pipeline().parameters.table_name}' as Source,\n'@{pipeline().globalParameters.shield_zone_name}.@{pipeline().parameters.table_name}' as Destination,\n'@{pipeline().parameters.TriggerType}' as TriggerType,\n'@{pipeline().parameters.TriggerId}' as TriggerId,\n'@{pipeline().parameters.TriggerName}' as TriggerName,\n'@{pipeline().parameters.TriggerTime}' as TriggerTime,\n'0' as rowsCopied,\n'0' as RowsRead,\n1 as No_ParallelCopies,\n0 as copyDuration_in_secs,\n'None' as effectiveIntegrationRuntime,\n'adlsgen2' as Source_Type,\n'sqlserver' as Sink_Type,\n'Skipped' as Execution_Status,\n'@{pipeline().parameters.date}' as CopyActivity_Start_Time,\n'@{pipeline().parameters.date}' as CopyActivity_End_Time,\n'0' as CopyActivity_queuingDuration_in_secs,\n'0' as CopyActivity_timeToFirstByte_in_secs,\n'0' as CopyActivity_transferDuration_in_secs\n,'@{pipeline().parameters.table_name}' as table_name,\n'0' as data_volume_mb;\nSELECT 1",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Log",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "pipeline_log"
+						}
+					}
+				}
+			},
+			{
+				"name": "Shield_Wait1",
+				"type": "Wait",
+				"dependsOn": [
+					{
+						"activity": "Shield_log",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"waitTimeInSeconds": 1
+				}
+			}
+		],
+		"parameters": {
+			"DataFactory_Name": {
+				"type": "object",
+				"defaultValue": "@pipeline().DataFactory"
+			},
+			"Pipeline_Name": {
+				"type": "object",
+				"defaultValue": "@pipeline().Pipeline"
+			},
+			"RunId": {
+				"type": "object",
+				"defaultValue": "@variables('MasterRunID')"
+			},
+			"TriggerType": {
+				"type": "object",
+				"defaultValue": "@pipeline().TriggerType"
+			},
+			"TriggerId": {
+				"type": "object",
+				"defaultValue": "@pipeline().TriggerId"
+			},
+			"TriggerName": {
+				"type": "object",
+				"defaultValue": "@pipeline().TriggerName"
+			},
+			"TriggerTime": {
+				"type": "object",
+				"defaultValue": "@pipeline().TriggerTime"
+			},
+			"dataflow_metrics": {
+				"type": "object"
+			},
+			"table_name": {
+				"type": "object",
+				"defaultValue": "@pipeline().parameters.table_name"
+			},
+			"date": {
+				"type": "object",
+				"defaultValue": "@variables('date')"
+			}
+		},
+		"folder": {
+			"name": "audit_logging"
+		},
+		"annotations": [],
+		"lastPublishTime": "2021-12-20T14:08:07Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

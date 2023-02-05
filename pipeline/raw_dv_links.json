@@ -1,0 +1,158 @@
+{
+	"name": "raw_dv_links",
+	"properties": {
+		"activities": [
+			{
+				"name": "LinkGetMetadata",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT\n\tm.LINK_MAP_ID,\n\tm.SOURCE_TABLE,\n\tm.RECORD_SOURCE,\n\tm.LINK_ID,\n\tm.PK_LIST,\n\tm.active_flg,\n\th.LINK_NAME,\n\th.SCHEMA_NAME,\n\td.HUBS_LIST,\n\tCASE \n\t\tWHEN @{pipeline().parameters.load_synapse}=1 THEN REPLACE(m.SOURCE_SCHEMA, 'EXT_', 'INT_')\n\t\tELSE SOURCE_SCHEMA\n\tEND SOURCE_SCHEMA\nFROM adf_metastore.dv.dv_link_map m\njoin adf_metastore.dv.dv_links h on h.LINK_ID= m.LINK_ID\nJOIN (SELECT lh.LINK_ID, STRING_AGG(h.HUB_NAME, ',') HUBS_LIST\nFROM adf_metastore.dv.dv_link_hubs lh\njoin adf_metastore.dv.dv_hubs h\non lh.HUB_ID = h.HUB_ID\ngroup by lh.LINK_ID) d ON h.LINK_ID= d.LINK_ID",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "Metastore_v2",
+						"type": "DatasetReference",
+						"parameters": {
+							"table_name": "dv_links",
+							"schema_name": "dv"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "LoopLinks",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "LinkGetMetadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('LinkGetMetadata').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "LinkLoad",
+							"type": "SqlServerStoredProcedure",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[etl].[LINK_GEN]",
+								"storedProcedureParameters": {
+									"job_id": {
+										"value": {
+											"value": "@pipeline().parameters.MasterRunID",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"pk_list": {
+										"value": {
+											"value": "@item().PK_LIST",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"record_source": {
+										"value": {
+											"value": "@item().RECORD_SOURCE",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_schema": {
+										"value": {
+											"value": "@item().SOURCE_SCHEMA",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_table": {
+										"value": {
+											"value": "@item().SOURCE_TABLE",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_schema": {
+										"value": {
+											"value": "@item().SCHEMA_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_table": {
+										"value": {
+											"value": "@item().LINK_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"hubs_list": {
+										"value": {
+											"value": "@item().HUBS_LIST",
+											"type": "Expression"
+										},
+										"type": "String"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "shield_db",
+								"type": "LinkedServiceReference",
+								"parameters": {
+									"database_name": {
+										"value": "@pipeline().globalParameters.adls_dw_container_name",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"MasterRunID": {
+				"type": "string"
+			},
+			"load_synapse": {
+				"type": "int",
+				"defaultValue": 0
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/data_warehouse/data vault/raw vault"
+		},
+		"annotations": []
+	}
+}

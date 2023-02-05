@@ -1,0 +1,301 @@
+{
+	"name": "incr_load_to_syn",
+	"properties": {
+		"activities": [
+			{
+				"name": "SetSynapseSchemaName",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "schema_name",
+					"value": {
+						"value": "@concat('INT_',pipeline().parameters.country_name)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "DateConditionalSet",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@empty(pipeline().parameters.date)",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "SetCurrentTimestampFromParam",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@pipeline().parameters.date",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "SetCurrentTimestamp",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "date",
+								"value": {
+									"value": "@utcnow()",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "GetMetadataFromADLS",
+				"type": "GetMetadata",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "caelum_data_lake_dataflow",
+						"type": "DatasetReference",
+						"parameters": {
+							"country": {
+								"value": "@pipeline().parameters.country_name",
+								"type": "Expression"
+							},
+							"zone": {
+								"value": "@pipeline().globalParameters.trusted_zone_name",
+								"type": "Expression"
+							},
+							"source": {
+								"value": "@pipeline().parameters.source",
+								"type": "Expression"
+							},
+							"year": {
+								"value": "@formatDateTime(pipeline().parameters.date,'yyyy')",
+								"type": "Expression"
+							},
+							"month": {
+								"value": "@formatDateTime(pipeline().parameters.date,'MM')",
+								"type": "Expression"
+							},
+							"day": {
+								"value": "@formatDateTime(pipeline().parameters.date,'dd')",
+								"type": "Expression"
+							},
+							"table": {
+								"value": "@pipeline().parameters.table_name",
+								"type": "Expression"
+							},
+							"file_timestamp": {
+								"value": "@formatDateTime(pipeline().parameters.date,'yyyyMMddhhmmss')",
+								"type": "Expression"
+							},
+							"adls_dw_container_name": {
+								"value": "@pipeline().globalParameters.adls_dw_container_name",
+								"type": "Expression"
+							}
+						}
+					},
+					"fieldList": [
+						"childItems"
+					],
+					"storeSettings": {
+						"type": "AzureBlobFSReadSettings",
+						"recursive": true,
+						"enablePartitionDiscovery": false
+					}
+				}
+			},
+			{
+				"name": "ForEachFile",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "GetMetadataFromADLS",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "DateConditionalSet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetSynapseSchemaName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('GetMetadataFromADLS').output.childItems",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "CopyIncrementalDataTrustedToSynapse_copy1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "ParquetSource",
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									}
+								},
+								"sink": {
+									"type": "SqlDWSink",
+									"tableOption": "autoCreate",
+									"disableMetricsCollection": false
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "caelum_data_lake_file_param",
+									"type": "DatasetReference",
+									"parameters": {
+										"country": {
+											"value": "@pipeline().parameters.country_name",
+											"type": "Expression"
+										},
+										"zone": {
+											"value": "@pipeline().globalParameters.trusted_zone_name",
+											"type": "Expression"
+										},
+										"source": {
+											"value": "@pipeline().parameters.source",
+											"type": "Expression"
+										},
+										"year": {
+											"value": "@formatDateTime(variables('date'),'yyyy')",
+											"type": "Expression"
+										},
+										"month": {
+											"value": "@formatDateTime(variables('date'),'MM')",
+											"type": "Expression"
+										},
+										"day": {
+											"value": "@formatDateTime(variables('date'),'dd')",
+											"type": "Expression"
+										},
+										"table": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"file_timestamp": {
+											"value": "@formatDateTime(variables('date'),'yyyyMMddhhmmss')",
+											"type": "Expression"
+										},
+										"file_name": {
+											"value": "@item().name",
+											"type": "Expression"
+										},
+										"adls_dw_container_name": {
+											"value": "@pipeline().globalParameters.adls_dw_container_name",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "data_vault_db",
+									"type": "DatasetReference",
+									"parameters": {
+										"TABLE_NAME": {
+											"value": "@pipeline().parameters.table_name",
+											"type": "Expression"
+										},
+										"SCHEMA_NAME": {
+											"value": "@variables('schema_name')",
+											"type": "Expression"
+										},
+										"dw_db_name": {
+											"value": "@pipeline().globalParameters.dw_db_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"date": {
+				"type": "string"
+			},
+			"source": {
+				"type": "string"
+			},
+			"table_name": {
+				"type": "string"
+			},
+			"MasterRunID": {
+				"type": "string"
+			},
+			"country_name": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"schema_name": {
+				"type": "String"
+			},
+			"file_name": {
+				"type": "String"
+			},
+			"file_timestamp": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}

@@ -1,0 +1,187 @@
+{
+	"name": "resumeSynapse",
+	"properties": {
+		"description": "resume the shield_db",
+		"activities": [
+			{
+				"name": "SetParsedSubscription",
+				"description": "Setting the subscription as a string variable",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetSQLPoolName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "subscriptionID",
+					"value": {
+						"value": "@pipeline().globalParameters.subscription_id",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetResourceGroup",
+				"description": "Setting the name of the Resource Group as a string variable",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "SetWorkspaceName",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "ResourceGroup",
+					"value": {
+						"value": "@pipeline().globalParameters.synapse_resource_group_name",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetSQLPoolName",
+				"description": "Setting the name of the SQL Dedicated Pool as a string variable.",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "SQLPoolName",
+					"value": {
+						"value": "@pipeline().globalParameters.dw_db_name",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "SetWorkspaceName",
+				"description": "Setting the name of the Workspace as a string variable.",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "WorkspaceName",
+					"value": {
+						"value": "@concat('syn-lw-caelum-', pipeline().globalParameters.environment,'-dw')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "GetPoolStatus",
+				"description": "Getting the log to determine if the SQL dedicated pool is closed or resume.",
+				"type": "WebActivity",
+				"dependsOn": [
+					{
+						"activity": "SetParsedSubscription",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "SetResourceGroup",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"url": {
+						"value": "@concat('https://management.azure.com/subscriptions/',variables('subscriptionID') , '/resourceGroups/',variables('ResourceGroup'),'/providers/Microsoft.Synapse/workspaces/',variables('WorkspaceName'), '/sqlPools/', variables('SQLPoolName'),'?api-version=2021-06-01')",
+						"type": "Expression"
+					},
+					"method": "GET",
+					"authentication": {
+						"type": "MSI",
+						"resource": "https://management.azure.com/"
+					}
+				}
+			},
+			{
+				"name": "CheckIfSynapseIsOnline",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "GetPoolStatus",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(activity('GetPoolStatus').output.properties.status,'Online')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "resumeDW",
+							"description": "Calling the resume synapse Api",
+							"type": "WebActivity",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "7.00:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"url": {
+									"value": "@concat('https://management.azure.com/subscriptions/',variables('subscriptionID'),'/resourceGroups/',variables('ResourceGroup'),'/providers/Microsoft.Synapse/workspaces/',variables('WorkspaceName'),'/sqlPools/',variables('SQLPoolName'),'/Resume?api-version=2019-06-01-preview')",
+									"type": "Expression"
+								},
+								"method": "POST",
+								"body": {
+									"value": "@json('{ }')",
+									"type": "Expression"
+								},
+								"authentication": {
+									"type": "MSI",
+									"resource": "https://management.azure.com/"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"variables": {
+			"subscriptionID": {
+				"type": "String"
+			},
+			"ResourceGroup": {
+				"type": "String"
+			},
+			"counter": {
+				"type": "String"
+			},
+			"SQLPoolName": {
+				"type": "String"
+			},
+			"WorkspaceName": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Caelum_Pipelines/utilities"
+		},
+		"annotations": []
+	}
+}
