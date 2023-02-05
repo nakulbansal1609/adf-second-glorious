@@ -1,0 +1,14 @@
+{
+	"name": "datalake",
+	"properties": {
+		"annotations": [],
+		"type": "AzureBlobFS",
+		"typeProperties": {
+			"url": "https://dlalwcaelumdevdw01.dfs.core.windows.net/"
+		},
+		"connectVia": {
+			"referenceName": "ahir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

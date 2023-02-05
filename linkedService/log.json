@@ -1,0 +1,14 @@
+{
+	"name": "log",
+	"properties": {
+		"annotations": [],
+		"type": "AzureSqlDatabase",
+		"typeProperties": {
+			"connectionString": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=sql-lw-caelum-dev-dw.database.windows.net;Initial Catalog=sqldb-lw-caelum-dev-adf-logs"
+		},
+		"connectVia": {
+			"referenceName": "ahir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

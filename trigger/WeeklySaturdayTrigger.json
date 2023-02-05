@@ -1,0 +1,25 @@
+{
+	"name": "WeeklySaturdayTrigger",
+	"properties": {
+		"annotations": [],
+		"runtimeState": "Stopped",
+		"pipelines": [],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Week",
+				"interval": 1,
+				"startTime": "2021-04-26T08:30:00",
+				"timeZone": "E. Europe Standard Time",
+				"schedule": {
+					"hours": [
+						7
+					],
+					"weekDays": [
+						"Saturday"
+					]
+				}
+			}
+		}
+	}
+}

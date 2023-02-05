@@ -1,0 +1,33 @@
+{
+	"name": "IncrementalTriggerNova",
+	"properties": {
+		"description": "Daily trigger for NOVA incremental ingestions at 15:00 CET",
+		"annotations": [],
+		"runtimeState": "Stopped",
+		"pipelines": [
+			{
+				"pipelineReference": {
+					"referenceName": "table_iterator_pipeline",
+					"type": "PipelineReference"
+				}
+			}
+		],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Day",
+				"interval": 1,
+				"startTime": "2022-01-18T10:07:00",
+				"timeZone": "W. Europe Standard Time",
+				"schedule": {
+					"minutes": [
+						0
+					],
+					"hours": [
+						15
+					]
+				}
+			}
+		}
+	}
+}

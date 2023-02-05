@@ -1,0 +1,32 @@
+{
+	"name": "dataset_filter",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake_table_lvl",
+						"type": "DatasetReference"
+					},
+					"name": "source"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake_dataflow",
+						"type": "DatasetReference"
+					},
+					"name": "sink"
+				}
+			],
+			"transformations": [
+				{
+					"name": "FilterOlderData"
+				}
+			],
+			"script": "parameters{\n\tdatetime_threshold as string,\n\tzone as string,\n\tcountry as string,\n\tsource as string,\n\ttable as string,\n\ttimestamp as string\n}\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false,\n\tpurgeFiles: true,\n\tformat: 'parquet',\n\twildcardPaths:[(concat('dw_data_store/', $zone,'/', $country,'/', $source,'/', $table, '/*/*/*/*'))]) ~> source\nsource filter(toTimestamp(byName('ROW_CREATED_DATETIME'))<=toTimestamp($datetime_threshold)) ~> FilterOlderData\nFilterOlderData sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tformat: 'parquet',\n\tfilePattern:(concat($table, '_' , $timestamp, '_', 'part[n].parquet')\r\n\r\n),\n\tumask: 0022,\n\tpreCommands: [],\n\tpostCommands: [],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tsaveOrder: 1) ~> sink"
+		}
+	}
+}

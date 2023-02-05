@@ -1,0 +1,105 @@
+{
+	"name": "data_movement_framework_v2",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake",
+						"type": "DatasetReference"
+					},
+					"name": "DataSource"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "Shield_bad_data",
+						"type": "DatasetReference"
+					},
+					"name": "TransientBadDataShield"
+				},
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake_dataflow",
+						"type": "DatasetReference"
+					},
+					"name": "RawZoneSink"
+				},
+				{
+					"dataset": {
+						"referenceName": "Shield",
+						"type": "DatasetReference"
+					},
+					"name": "ShieldSink"
+				},
+				{
+					"dataset": {
+						"referenceName": "Shield_bad_data",
+						"type": "DatasetReference"
+					},
+					"name": "RawBadDataShield"
+				},
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake_dataflow",
+						"type": "DatasetReference"
+					},
+					"name": "TrustedZoneSink"
+				}
+			],
+			"transformations": [
+				{
+					"name": "DqRuleSplit"
+				},
+				{
+					"name": "TokenCompute"
+				},
+				{
+					"name": "SelectTokenColumns"
+				},
+				{
+					"name": "UpdateROWID"
+				},
+				{
+					"name": "SelectOrigColumns"
+				},
+				{
+					"name": "JoinToken"
+				},
+				{
+					"name": "DQChecksNonPII"
+				},
+				{
+					"name": "CleanData"
+				},
+				{
+					"name": "DQFailReasonTransientBadDataShield"
+				},
+				{
+					"name": "DQFailReasonRawBadDataShield"
+				},
+				{
+					"name": "UnionBypassNonPIIgoodData"
+				},
+				{
+					"name": "PIINullBypassedCols"
+				},
+				{
+					"name": "NonPIINullBypassedCols"
+				},
+				{
+					"name": "UnionBypassPIIGoodData"
+				},
+				{
+					"name": "FilterPIIBypassedData"
+				},
+				{
+					"name": "FilterNonPIIBypassedData"
+				}
+			],
+			"script": "parameters{\n\tfulltoken_list as string ('\\\"Åtgärd\\\"'),\n\tpartialtoken_email_list as string (''),\n\tpartialtoken_iban_list as string (''),\n\tpartialtoken_date_list as string (''),\n\tpk_list as string ('\\\"ROW_ID\\\"'),\n\tmax_row_id as integer (0),\n\ttable_name as string ('NOVA_niAtgTdo'),\n\tpii_dq_checks as boolean (true()),\n\tnon_pii_dq_checks as boolean (!isNull(toFloat(byName('ÅtgärdsNr')))&&(between(toFloat(byName('Prioritet')),1,2)||isNull(toFloat(byName('Prioritet'))))&&(in([1,3,4,11,12],toInteger(byName('ObjTyp')))||isNull(toInteger(byName('ObjTyp'))))&&(between(toFloat(byName('Utförd')),0,1)||isNull(toFloat(byName('Utförd'))))&&(between(toFloat(byName('EInvoiceType')),0,2)||isNull(toFloat(byName('EInvoiceType'))))),\n\ttimestamp as string ('20211025115331'),\n\tfulltoken_unique_list as string (''),\n\tconditional_fulltoken_unique_list1 as string ('\\\"ObjNr\\\"'),\n\tconditional_fulltoken_condition1 as boolean (in([1,4,11],toInteger(byName(\"ObjTyp\")))),\n\tsupport_col_list as string (''),\n\tpk_join_l as string (toString(byName(concat(replace($pk_list,'\\\"',''),'_ORIG')))),\n\tpk_join_r as string (toString(byName(concat(replace($pk_list,'\\\"',''),'_TOKEN')))),\n\tconditional_fulltoken_unique_list2 as string ('\\\"SubNr\\\"'),\n\tconditional_fulltoken_condition2 as boolean (equals(toInteger(byName(\"ObjTyp\")),1)),\n\tdq_fail_reason as string (''),\n\tpipeline_run_id as string (''),\n\tbypass_pii_dq_checks as boolean (true()),\n\tbypass_non_pii_dq_checks as boolean (true()),\n\tpii_bypass_list as string (''),\n\tnon_pii_bypass_list as string ('')\n}\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false,\n\tformat: 'parquet') ~> DataSource\nCleanData split($pii_dq_checks,\n\tdisjoint: false) ~> DqRuleSplit@(GoodData, BadData)\nUnionBypassPIIGoodData derive(each(match(instr($fulltoken_list,'\"'+name+'\"')>0), $$ = iif((trim(toString($$))==''||isNull(toString($$))),toString($$),sha2(256,concat('dX!6',trim(toString($$)))))),\n\t\teach(match(instr($partialtoken_email_list,'\"'+name+'\"')>0), $$ = iif(regexMatch($$, `^[\\w-\\.äöåÄÖÅÆæØøšž]+@([\\w-äöåÄÖÅÆæØøšž]+\\.)+[\\w-]{1,4}$`),regexReplace($$, '(?=.+@).', 'x'), iif((trim(toString($$))==''||isNull(toString($$))),toString($$),sha2(256,concat('dX!6',trim(toString($$))))))),\n\t\teach(match(instr($partialtoken_iban_list,'\"'+name+'\"')>0), $$ = regexReplace($$, '[0-9]', '0')),\n\t\teach(match(instr($partialtoken_date_list,'\"'+name+'\"')>0), $$ = concat(toString(year($$)),'-XX-XX')),\n\t\teach(match(instr($fulltoken_unique_list,'\"'+name+'\"')>0), $$ = iif((trim(toString($$))==''||isNull(toString($$))),toString($$),toString(regexReplace(left(regexReplace(sha2(256,concat('dX!6',toString($$))),'[^0-9]',''),16),'^0+','')))),\n\t\teach(match(instr($conditional_fulltoken_unique_list1,'\"'+name+'\"')>0), $$ = iif((trim(toString($$))==''||isNull(toString($$)))||!($conditional_fulltoken_condition1),toString($$),toString(regexReplace(left(regexReplace(sha2(256,concat('dX!6',toString($$))),'[^0-9]',''),16),'^0+','')))),\n\t\teach(match(instr($conditional_fulltoken_unique_list2,'\"'+name+'\"')>0), $$ = iif((trim(toString($$))==''||isNull(toString($$)))||!($conditional_fulltoken_condition2),toString($$),toString(regexReplace(left(regexReplace(sha2(256,concat('dX!6',toString($$))),'[^0-9]',''),16),'^0+',''))))) ~> TokenCompute\nTokenCompute select(mapColumn(\n\t\teach(match(regexMatch(name,replace(replace($pk_list,'\"',''),',','|'))),\n\t\t\t$$+'_TOKEN' = $$),\n\t\teach(match(regexMatch(name,replace(replace(concat($fulltoken_list,',',$fulltoken_unique_list,',',$partialtoken_email_list,',',$partialtoken_iban_list,',',$partialtoken_date_list,',',$conditional_fulltoken_unique_list1,',',$conditional_fulltoken_unique_list2),'\"',''),',','|'))),\n\t\t\t$$+'_Token' = $$),\n\t\teach(match(name=='ROW_CREATED_DATETIME'))\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> SelectTokenColumns\nDataSource derive(each(match(name=='ROW_ID'), $$ = add($max_row_id,toInteger($$)))) ~> UpdateROWID\nUnionBypassPIIGoodData select(mapColumn(\n\t\teach(match(regexMatch(name,replace(replace($pk_list,'\"',''),',','|'))),\n\t\t\t$$+'_ORIG' = $$),\n\t\teach(match(regexMatch(name,replace(replace(concat($fulltoken_list,',',$fulltoken_unique_list,',',$partialtoken_email_list,',',$partialtoken_iban_list,',',$partialtoken_date_list,',',$conditional_fulltoken_unique_list1,',',$conditional_fulltoken_unique_list2,',',$support_col_list),'\"',''),',','|'))))\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> SelectOrigColumns\nSelectOrigColumns, SelectTokenColumns join($pk_join_l == $pk_join_r,\n\tjoinType:'inner',\n\tbroadcast: 'auto')~> JoinToken\nTokenCompute split($non_pii_dq_checks,\n\tdisjoint: false) ~> DQChecksNonPII@(NonPIIGoodData, NonPIIBadData)\nUpdateROWID derive(each(match(type=='boolean'), $$ = toInteger(iif(toBoolean($$) == true(), 1, 0)))) ~> CleanData\nDqRuleSplit@BadData derive(dq_fail_reason = $dq_fail_reason,\n\t\tpipeline_run_id = $pipeline_run_id) ~> DQFailReasonTransientBadDataShield\nDQChecksNonPII@NonPIIBadData derive(dq_fail_reason = $dq_fail_reason,\n\t\tpipeline_run_id = $pipeline_run_id) ~> DQFailReasonRawBadDataShield\nDQChecksNonPII@NonPIIGoodData, NonPIINullBypassedCols union(byName: true)~> UnionBypassNonPIIgoodData\nFilterPIIBypassedData@PIIBypassedRows derive(each(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='string'), $$ = toString(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='date'), $$ = toDate(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='timestamp'), $$ = toTimestamp(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='decimal'), $$ = toDecimal(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='float'), $$ = toFloat(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='integer'), $$ = toInteger(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='long'), $$ = toLong(null())),\n\t\teach(match(instr($pii_bypass_list,'\"'+name+'\"')>0&&type=='short'), $$ = toShort(null()))) ~> PIINullBypassedCols\nFilterNonPIIBypassedData@NonPIIBypassedRows derive(each(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='string'), $$ = toString(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='date'), $$ = toDate(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='timestamp'), $$ = toTimestamp(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='decimal'), $$ = toDecimal(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='float'), $$ = toFloat(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='integer'), $$ = toInteger(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='long'), $$ = toLong(null())),\n\t\teach(match(instr($non_pii_bypass_list,'\"'+name+'\"')>0&&type=='short'), $$ = toShort(null()))) ~> NonPIINullBypassedCols\nDqRuleSplit@GoodData, PIINullBypassedCols union(byName: true)~> UnionBypassPIIGoodData\nDqRuleSplit@BadData split($bypass_pii_dq_checks,\n\tdisjoint: false) ~> FilterPIIBypassedData@(PIINotBypassedRows, PIIBypassedRows)\nDQChecksNonPII@NonPIIBadData split($bypass_non_pii_dq_checks,\n\tdisjoint: false) ~> FilterNonPIIBypassedData@(NonPIINotBypassedRows, NonPIIBypassedRows)\nDQFailReasonTransientBadDataShield sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tstaged: true,\n\tallowCopyCommand: true,\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tsaveOrder: 2,\n\terrorHandlingOption: 'stopOnFirstError') ~> TransientBadDataShield\nTokenCompute sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tformat: 'parquet',\n\tfilePattern:($table_name + '_' + $timestamp + '_' + 'part[n].parquet'),\n\tumask: 0022,\n\tpreCommands: [],\n\tpostCommands: [],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tsaveOrder: 3) ~> RawZoneSink\nJoinToken sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tstaged: true,\n\tallowCopyCommand: true,\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tsaveOrder: 1,\n\terrorHandlingOption: 'stopOnFirstError') ~> ShieldSink\nDQFailReasonRawBadDataShield sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\tformat: 'table',\n\tstaged: true,\n\tallowCopyCommand: true,\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tsaveOrder: 4,\n\terrorHandlingOption: 'stopOnFirstError') ~> RawBadDataShield\nUnionBypassNonPIIgoodData sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tformat: 'parquet',\n\tfilePattern:($table_name + '_' + $timestamp + '_' + 'part[n].parquet'),\n\tumask: 0022,\n\tpreCommands: [],\n\tpostCommands: [],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tsaveOrder: 5) ~> TrustedZoneSink"
+		}
+	}
+}

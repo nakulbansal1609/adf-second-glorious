@@ -1,0 +1,35 @@
+{
+	"name": "data_anon_dataflow",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "Shield_staging",
+						"type": "DatasetReference"
+					},
+					"name": "AnonTableSource"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "Shield",
+						"type": "DatasetReference"
+					},
+					"name": "AnonTableTarget"
+				}
+			],
+			"transformations": [
+				{
+					"name": "TokenValues"
+				},
+				{
+					"name": "ComputeCloudAnonDate"
+				}
+			],
+			"script": "source(output(\n\t\tAktNr as string,\n\t\tGldNr as string,\n\t\tSamlAktNr as string,\n\t\tGldAvpers as boolean,\n\t\tDatum as timestamp\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tformat: 'table',\n\tstaged: false) ~> AnonTableSource\nAnonTableSource derive(each(match(instr('\"GldNr\",\"AktNr\",\"SamlAktNr\"','\"'+name+'\"')>0), $$ + 'Token' = iif((trim(toString($$))==''||isNull(toString($$))),toString($$),toString(regexReplace(left(regexReplace(sha2(256,concat('dX!6',toString($$))),'[^0-9]',''),16),'^0+','')))),\n\t\tGldAvpers = toInteger(iif(GldAvpers == true(), 1, 0))) ~> TokenValues\nTokenValues derive(CloudAnonDate = addMonths(Datum, 18)) ~> ComputeCloudAnonDate\nComputeCloudAnonDate sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tdeletable:false,\n\tinsertable:true,\n\tupdateable:false,\n\tupsertable:false,\n\ttruncate:true,\n\tformat: 'table',\n\tstaged: true,\n\tallowCopyCommand: true,\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\terrorHandlingOption: 'stopOnFirstError') ~> AnonTableTarget"
+		}
+	}
+}

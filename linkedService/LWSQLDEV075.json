@@ -1,0 +1,22 @@
+{
+	"name": "LWSQLDEV075",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"parameters": {
+			"database": {
+				"type": "String",
+				"defaultValue": "master"
+			}
+		},
+		"annotations": [],
+		"type": "SqlServer",
+		"typeProperties": {
+			"connectionString": "integrated security=False;data source=LWSQLDEV075.intad1.com;initial catalog=@{linkedService().database};user id=SVC_ACT_ADF_AZURE",
+			"encryptedCredential": "eyJDcmVkZW50aWFsSWQiOiJjZWE1M2JmOC02MzczLTQ4NDUtYWMzOS00MjZhOTNhNzFjYzAiLCJWZXJzaW9uIjoiMi4wIiwiQ2xhc3NUeXBlIjoiTWljcm9zb2Z0LkRhdGFQcm94eS5Db3JlLkludGVyU2VydmljZURhdGFDb250cmFjdC5DcmVkZW50aWFsU1UwNkNZMTQifQ=="
+		},
+		"connectVia": {
+			"referenceName": "shir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

@@ -1,0 +1,21 @@
+{
+	"name": "ahir-lw-caelum-dev-dw-02",
+	"properties": {
+		"type": "Managed",
+		"typeProperties": {
+			"computeProperties": {
+				"location": "West Europe",
+				"dataFlowProperties": {
+					"computeType": "General",
+					"coreCount": 16,
+					"timeToLive": 10,
+					"cleanup": true
+				}
+			}
+		},
+		"managedVirtualNetwork": {
+			"type": "ManagedVirtualNetworkReference",
+			"referenceName": "default"
+		}
+	}
+}

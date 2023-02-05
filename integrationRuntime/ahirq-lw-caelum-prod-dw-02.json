@@ -1,0 +1,22 @@
+{
+	"name": "ahirq-lw-caelum-prod-dw-02",
+	"properties": {
+		"type": "Managed",
+		"description": "To be used in sequential loads with higher size (>4.000.000 rows)",
+		"typeProperties": {
+			"computeProperties": {
+				"location": "West Europe",
+				"dataFlowProperties": {
+					"computeType": "General",
+					"coreCount": 16,
+					"timeToLive": 15,
+					"cleanup": false
+				}
+			}
+		},
+		"managedVirtualNetwork": {
+			"type": "ManagedVirtualNetworkReference",
+			"referenceName": "default"
+		}
+	}
+}

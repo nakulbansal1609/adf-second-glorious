@@ -1,0 +1,20 @@
+{
+	"name": "shield_db",
+	"properties": {
+		"parameters": {
+			"database_name": {
+				"type": "String",
+				"defaultValue": "synlwcaelumdevdwsql"
+			}
+		},
+		"annotations": [],
+		"type": "AzureSqlDW",
+		"typeProperties": {
+			"connectionString": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=syn-lw-caelum-dev-dw.sql.azuresynapse.net;Initial Catalog=@{linkedService().database_name}"
+		},
+		"connectVia": {
+			"referenceName": "ahir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

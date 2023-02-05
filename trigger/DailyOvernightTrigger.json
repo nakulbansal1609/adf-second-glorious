@@ -1,0 +1,29 @@
+{
+	"name": "DailyOvernightTrigger",
+	"properties": {
+		"annotations": [],
+		"runtimeState": "Started",
+		"pipelines": [
+			{
+				"pipelineReference": {
+					"referenceName": "table_iterator_pipeline",
+					"type": "PipelineReference"
+				}
+			}
+		],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Day",
+				"interval": 1,
+				"startTime": "2021-04-26T10:00:00",
+				"timeZone": "GTB Standard Time",
+				"schedule": {
+					"hours": [
+						14
+					]
+				}
+			}
+		}
+	}
+}

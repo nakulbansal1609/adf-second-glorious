@@ -1,0 +1,17 @@
+{
+	"name": "databricks_csml",
+	"properties": {
+		"annotations": [],
+		"type": "AzureDatabricks",
+		"typeProperties": {
+			"domain": "https://adb-8765716649475653.13.azuredatabricks.net",
+			"authentication": "MSI",
+			"workspaceResourceId": "/subscriptions/93ce75ee-1b3b-4d3f-a220-ec3075d1aa34/resourceGroups/rg-lw-caelum-dev-dw-data/providers/Microsoft.Databricks/workspaces/adb-lw-caelum-dev-dw",
+			"existingClusterId": "0630-051800-garbs274"
+		},
+		"connectVia": {
+			"referenceName": "ahir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

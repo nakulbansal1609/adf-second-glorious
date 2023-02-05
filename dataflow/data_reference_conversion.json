@@ -1,0 +1,35 @@
+{
+	"name": "data_reference_conversion",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake_csv",
+						"type": "DatasetReference"
+					},
+					"name": "ReferenceDataCSV"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "caelum_data_lake_dataflow",
+						"type": "DatasetReference"
+					},
+					"name": "SinkCsvToParquet"
+				}
+			],
+			"transformations": [
+				{
+					"name": "SurrogateKeyReference"
+				},
+				{
+					"name": "DerivedColumnRowIDPlaceholder"
+				}
+			],
+			"script": "parameters{\n\ttable_name as string,\n\ttimestamp as string\n}\nsource(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tignoreNoFilesFound: false) ~> ReferenceDataCSV\nDerivedColumnRowIDPlaceholder keyGenerate(output(ROW_ID as long),\n\tstartAt: 1L) ~> SurrogateKeyReference\nReferenceDataCSV derive(PII_Placeholder = 'Placeholder') ~> DerivedColumnRowIDPlaceholder\nSurrogateKeyReference sink(allowSchemaDrift: true,\n\tvalidateSchema: false,\n\tformat: 'parquet',\n\tpartitionFileNames:[($table_name + '_' + $timestamp + '.parquet')],\n\tumask: 0022,\n\tpreCommands: [],\n\tpostCommands: [],\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true,\n\tmapColumn(\n\t\teach(match(stream=='SurrogateKeyReference'),\n\t\t\tregexReplace($$,' ','_') = $$)\n\t),\n\tpartitionBy('hash', 1)) ~> SinkCsvToParquet"
+		}
+	}
+}

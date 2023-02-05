@@ -1,0 +1,33 @@
+{
+	"name": "sql_server",
+	"properties": {
+		"parameters": {
+			"database": {
+				"type": "string",
+				"defaultValue": "master"
+			},
+			"server_path": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "SqlServer",
+		"typeProperties": {
+			"connectionString": "Integrated Security=True;Data Source=@{linkedService().server_path};Initial Catalog=@{linkedService().database}",
+			"userName": "INTAD1\\SVC-Caelum-ADF-DEV",
+			"password": {
+				"type": "AzureKeyVaultSecret",
+				"store": {
+					"referenceName": "keyvault",
+					"type": "LinkedServiceReference"
+				},
+				"secretName": "SVC-Caelum-ADF-DEV"
+			}
+		},
+		"connectVia": {
+			"referenceName": "shir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/linkedservices"
+}

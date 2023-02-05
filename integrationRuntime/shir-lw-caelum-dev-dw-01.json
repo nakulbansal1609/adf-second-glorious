@@ -1,0 +1,7 @@
+{
+	"name": "shir-lw-caelum-dev-dw-01",
+	"properties": {
+		"type": "SelfHosted",
+		"description": "Self hosted integration runtime on server LAWPPDEV178"
+	}
+}

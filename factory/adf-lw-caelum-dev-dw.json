@@ -1,0 +1,69 @@
+{
+	"name": "adf-lw-caelum-dev-dw",
+	"properties": {
+		"globalParameters": {
+			"environment": {
+				"type": "string",
+				"value": "dev"
+			},
+			"transient_zone_name": {
+				"type": "string",
+				"value": "transient"
+			},
+			"raw_zone_name": {
+				"type": "string",
+				"value": "raw"
+			},
+			"trusted_zone_name": {
+				"type": "string",
+				"value": "trusted"
+			},
+			"shield_zone_name": {
+				"type": "string",
+				"value": "shield"
+			},
+			"refined_zone_name": {
+				"type": "string",
+				"value": "refined"
+			},
+			"shield_db_name": {
+				"type": "string",
+				"value": "synlwcaelumdevdwsql"
+			},
+			"adls_dw_container_name": {
+				"type": "string",
+				"value": "fs01-dlalwcaelumdevdw01"
+			},
+			"adf_resource_group_name": {
+				"type": "string",
+				"value": "rg-lw-caelum-dev-dw-data"
+			},
+			"raw_rejected_zone_name": {
+				"type": "string",
+				"value": "raw_bad_data"
+			},
+			"transient_rejected_zone_name": {
+				"type": "string",
+				"value": "transient_bad_data"
+			},
+			"dw_db_name": {
+				"type": "string",
+				"value": "synlwcaelumdevdwsql"
+			},
+			"synapse_resource_group_name": {
+				"type": "string",
+				"value": "rg-lw-caelum-dev-dw-data"
+			},
+			"subscription_id": {
+				"type": "string",
+				"value": "93ce75ee-1b3b-4d3f-a220-ec3075d1aa34"
+			}
+		}
+	},
+	"location": "westeurope",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "ea12040b-6f81-46c9-89e5-9f216d60e187",
+		"tenantId": "7002cf90-6974-42ef-a6aa-ba21536c55d4"
+	}
+}

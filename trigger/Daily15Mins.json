@@ -1,0 +1,51 @@
+{
+	"name": "Daily15Mins",
+	"properties": {
+		"annotations": [],
+		"runtimeState": "Stopped",
+		"pipelines": [
+			{
+				"pipelineReference": {
+					"referenceName": "nrt_table_iterator",
+					"type": "PipelineReference"
+				}
+			}
+		],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Week",
+				"interval": 1,
+				"startTime": "2021-07-13T09:00:00",
+				"timeZone": "E. Europe Standard Time",
+				"schedule": {
+					"minutes": [
+						0,
+						15,
+						30,
+						45
+					],
+					"hours": [
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						8
+					],
+					"weekDays": [
+						"Monday",
+						"Tuesday",
+						"Wednesday",
+						"Thursday",
+						"Friday"
+					]
+				}
+			}
+		}
+	}
+}

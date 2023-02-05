@@ -1,0 +1,14 @@
+{
+	"name": "metastore",
+	"properties": {
+		"annotations": [],
+		"type": "AzureSqlDatabase",
+		"typeProperties": {
+			"connectionString": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=sql-lw-caelum-dev-dw.database.windows.net;Initial Catalog=adf_metastore"
+		},
+		"connectVia": {
+			"referenceName": "ahir-lw-caelum-dev-dw-01",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

@@ -1,0 +1,33 @@
+{
+	"name": "IncrementalTriggerKFM",
+	"properties": {
+		"description": "Daily trigger for KFM incremental ingestions at 08:00 CET",
+		"annotations": [],
+		"runtimeState": "Started",
+		"pipelines": [
+			{
+				"pipelineReference": {
+					"referenceName": "table_iterator_pipeline",
+					"type": "PipelineReference"
+				}
+			}
+		],
+		"type": "ScheduleTrigger",
+		"typeProperties": {
+			"recurrence": {
+				"frequency": "Day",
+				"interval": 1,
+				"startTime": "2022-01-18T10:11:00",
+				"timeZone": "W. Europe Standard Time",
+				"schedule": {
+					"minutes": [
+						30
+					],
+					"hours": [
+						8
+					]
+				}
+			}
+		}
+	}
+}
