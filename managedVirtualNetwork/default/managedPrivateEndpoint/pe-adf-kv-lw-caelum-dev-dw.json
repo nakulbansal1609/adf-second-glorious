@@ -1,0 +1,10 @@
+{
+	"name": "pe-adf-kv-lw-caelum-dev-dw",
+	"properties": {
+		"privateLinkResourceId": "/subscriptions/93ce75ee-1b3b-4d3f-a220-ec3075d1aa34/resourceGroups/rg-lw-caelum-dev-lz-shared/providers/Microsoft.KeyVault/vaults/kv-lw-caelum-dev-lz",
+		"groupId": "vault",
+		"fqdns": [
+			"kv-lw-caelum-dev-lz.vaultcore.azure.net"
+		]
+	}
+}

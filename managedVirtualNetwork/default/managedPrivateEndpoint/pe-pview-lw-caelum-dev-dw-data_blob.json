@@ -1,0 +1,7 @@
+{
+	"name": "pe-pview-lw-caelum-dev-dw-data_blob",
+	"properties": {
+		"privateLinkResourceId": "/subscriptions/93ce75ee-1b3b-4d3f-a220-ec3075d1aa34/resourceGroups/rg-lw-caelum-dev-dw-data-pview-managed/providers/Microsoft.Storage/storageAccounts/scanwesteuropexdujnyt",
+		"groupId": "blob"
+	}
+}

@@ -1,0 +1,10 @@
+{
+	"name": "pe-adf-synw-lw-caelum-dev-dw",
+	"properties": {
+		"privateLinkResourceId": "/subscriptions/93ce75ee-1b3b-4d3f-a220-ec3075d1aa34/resourceGroups/rg-lw-caelum-dev-dw-data/providers/Microsoft.Synapse/workspaces/syn-lw-caelum-dev-dw",
+		"groupId": "sql",
+		"fqdns": [
+			"syn-lw-caelum-dev-dw.sql.azuresynapse.net"
+		]
+	}
+}

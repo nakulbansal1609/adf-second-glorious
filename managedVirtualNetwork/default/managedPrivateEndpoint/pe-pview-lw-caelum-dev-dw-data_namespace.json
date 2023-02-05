@@ -1,0 +1,7 @@
+{
+	"name": "pe-pview-lw-caelum-dev-dw-data_namespace",
+	"properties": {
+		"privateLinkResourceId": "/subscriptions/93ce75ee-1b3b-4d3f-a220-ec3075d1aa34/resourceGroups/rg-lw-caelum-dev-dw-data-pview-managed/providers/Microsoft.EventHub/namespaces/Atlas-ca2a6f51-261f-437f-81f9-9737a415067a",
+		"groupId": "namespace"
+	}
+}
